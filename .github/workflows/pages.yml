@@ -2,6 +2,11 @@ name: Seite veröffentlichen
 
 on:
   push:
+    paths:
+      - "site/**"
+      - "erinnerungen/**"
+      - "tools/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
