@@ -3,12 +3,15 @@ import cv2
 import numpy as np
 from PIL import Image, ImageFilter
 
-# Varianten: Verlauf Mitte/Rand (RGB), Schattenfarbe (multipliziert), Schattenstaerke, Koernung
+# Varianten: Verlauf Mitte/Rand (RGB), Schattenfarbe (multipliziert), Schattenstaerke, Koernung;
+# style "karte" = Karte im Messingrahmen, "intarsie" = Module direkt ins Porzellan eingelegt (ink = Farbe)
 PALETTES = {
-    "dunkel": dict(file="herz-qr.png", center=(84, 79, 76), edge=(24, 23, 25),
+    "dunkel": dict(style="karte", file="herz-qr.png", center=(84, 79, 76), edge=(24, 23, 25),
                    shadow=(0.15, 0.13, 0.14), strength=1.0, grain=2.4),
-    "hell": dict(file="herz-qr-hell.png", center=(233, 229, 221), edge=(190, 184, 175),
+    "hell": dict(style="karte", file="herz-qr-hell.png", center=(233, 229, 221), edge=(190, 184, 175),
                  shadow=(0.40, 0.35, 0.32), strength=1.0, grain=3.0),
+    "weiss": dict(style="intarsie", file="herz-qr-weiss.png", ink=(38, 14, 22), center=(88, 87, 88),
+                  edge=(21, 22, 24), shadow=(0.10, 0.10, 0.11), strength=1.0, grain=2.0),
 }
 
 

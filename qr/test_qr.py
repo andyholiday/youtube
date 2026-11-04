@@ -1,4 +1,4 @@
-"""Prueft den 3D-Herz-QR (Varianten dunkel und hell): beide unabhaengigen Decoder (zxing-cpp, OpenCV) lesen die URL."""
+"""Prueft den 3D-Herz-QR (Varianten dunkel, hell und weiss): beide unabhaengigen Decoder (zxing-cpp, OpenCV) lesen die URL."""
 from pathlib import Path
 
 import cv2
@@ -15,7 +15,7 @@ HIER = Path(__file__).parent
 
 @pytest.fixture(scope="module")
 def frisch(tmp_path_factory):
-    """Beide Varianten einmal frisch erzeugt (die Szene wird nur einmal gerendert)."""
+    """Alle Varianten einmal frisch erzeugt (die Szene wird nur einmal gerendert)."""
     return make_qr.compose(make_qr.URL, tmp_path_factory.mktemp("qr"), 32)
 
 
@@ -71,3 +71,15 @@ def test_karte_hell_und_module_dunkel(png):
     h, w = grau.shape
     karte = grau[int(h * 0.30):int(h * 0.66), int(w * 0.30):int(w * 0.70)]
     assert np.percentile(karte, 98) > 200 and np.percentile(karte, 2) < 80
+
+
+def test_weiss_plateau_gleichmaessig_hell_ohne_glanzpunkte():
+    """Weisse Variante: Das Plateau (helle Pixel im QR-Bereich) hat gleichmaessiges Licht, keine Glanzlichter."""
+    grau = np.asarray(Image.open(HIER / PALETTES["weiss"]["file"]).convert("L"), np.float32)
+    h, w = grau.shape
+    flaeche = grau[int(h * 0.30):int(h * 0.66), int(w * 0.30):int(w * 0.70)]
+    dunkel = cv2.dilate((flaeche < 150).astype(np.uint8), np.ones((15, 15), np.uint8)) > 0   # Modulkanten ausnehmen
+    hell = flaeche[~dunkel]
+    assert hell.size > 10000
+    assert np.percentile(hell, 1) > 220 and np.percentile(hell, 99) < 250
+    assert np.percentile(hell, 99) - np.percentile(hell, 1) < 15

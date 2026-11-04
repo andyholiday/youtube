@@ -1,9 +1,10 @@
-"""Erzeugt den QR-Code im 3D-Herz: herz-qr.png (dunkel) und herz-qr-hell.png (hell).
+"""Erzeugt den QR-Code im 3D-Herz: herz-qr.png (dunkel), herz-qr-hell.png (hell), herz-qr-weiss.png (weiss).
 
-Das Bordeaux-Herz mit Messing-Fasenrand wird als 3D-Szene (Three.js, headless Chromium via Playwright) gerendert,
-der QR-Code danach flach und frontal in die Karte gesetzt.
+Das Bordeaux-Herz mit Messing-Fasenrand (dunkel/hell) bzw. das weisse Porzellan-Herz (weiss) wird als
+3D-Szene (Three.js, headless Chromium via Playwright) gerendert, der QR-Code danach flach und frontal
+gesetzt: als Karte im Messingrahmen oder als Intarsie auf dem ebenen Plateau des Porzellans.
 
-Aufruf:  python3 make_qr.py [URL] [--out ORDNER] [--px PIXEL_PRO_MODUL]
+Aufruf:  python3 make_qr.py [URL] [--out ORDNER] [--px PIXEL_PRO_MODUL] [--variante dunkel hell weiss]
 Voraussetzung: node mit globalem `playwright` (Chromium vorhanden), Internet nur beim
 ersten Lauf (Three.js wird in _cache/ abgelegt).
 """
@@ -21,11 +22,13 @@ from PIL import Image
 
 import layout
 from backdrop import PALETTES, compose as backdrop, inner_shadow
+from inlay import engrave
 
 HIER = Path(__file__).parent
 URL = "https://andyholiday.github.io/youtube/"
 QUIET = 3.5          # Ruhezone in Modulen, innerhalb der hellen Karte
 DARK = "#2b0912"     # fast schwarzes Bordeaux, hoher Kontrast zur hellen Karte
+INLAY_FRAME = 0.5    # Plateau ragt so weit (Module) ueber die Ruhezone hinaus
 BEZEL = 2.0          # Breite des Messing-Fasenrands in Modulen
 THREE = "https://cdn.jsdelivr.net/npm/three@0.169.0/"
 THREE_FILES = {"three.module.js": "build/three.module.js",
@@ -44,21 +47,21 @@ def ensure_three():
     return cache
 
 
-def scene_config(plan, px):
+def scene_config(plan, px, style="karte"):
     left, top, w, h = plan["view"]
     cx0, cy0 = plan["card"]
     side = plan["side"]
-    return {"px": px, "view": {"left": left, "top": top, "w": w, "h": h},
-            "outline": plan["outline"].tolist(),
-            "inner": layout.inset_outline(plan["outline"], BEZEL).tolist(),
-            "card": {"cx": cx0 + side / 2, "cy": cy0 + side / 2, "side": side, "frame": layout.FRAME}}
+    inner = layout.inset_outline(plan["outline"], BEZEL).tolist() if style == "karte" else []
+    return {"px": px, "view": {"left": left, "top": top, "w": w, "h": h}, "style": style,
+            "outline": plan["outline"].tolist(), "inner": inner,
+            "card": {"cx": cx0 + side / 2, "cy": cy0 + side / 2, "side": side, "frame": plan["frame"]}}
 
 
-def render_scene(plan, px, target):
+def render_scene(plan, px, target, style="karte"):
     cache = ensure_three()
     with tempfile.TemporaryDirectory() as tmp:
         cfg = Path(tmp) / "cfg.json"
-        cfg.write_text(json.dumps(scene_config(plan, px)))
+        cfg.write_text(json.dumps(scene_config(plan, px, style)))
         subprocess.run(["node", str(HIER / "render_heart.js"), str(cfg), str(target), str(cache)],
                        check=True, timeout=600)
 
@@ -90,20 +93,25 @@ def finder(x, y):
     return rrect(x, y, 7, 0.3) + rrect(x + 1, y + 1, 5, 0.8) + rrect(x + 2, y + 2, 3, 1.4)
 
 
-def qr_svg(url, side):
-    """Transparenter SVG-Block der Karte (Einheit Modul): nur dunkle Module."""
+def tile(x, y):
+    """Quadratisches Modul mit weich gerundeten Ecken und hauchfeiner Fuge (Intarsie)."""
+    return rrect(x + 0.03, y + 0.03, 0.94, 0.2)
+
+
+def qr_svg(url, side, module=scaled_heart, ink=DARK):
+    """Transparenter SVG-Block der Karte (Einheit Modul): nur dunkle Module; module(x, y) liefert den Modulpfad."""
     qr = segno.make(url, error="h", boost_error=False)
     n = qr.symbol_size(border=0)[0]
     assert n + 2 * QUIET == side, (n, side)
     finders = [(0, 0), (n - 7, 0), (0, n - 7)]
     in_finder = lambda r, c: any(fx - 1 <= c < fx + 8 and fy - 1 <= r < fy + 8 for fx, fy in finders)
-    hearts = [scaled_heart(QUIET + c, QUIET + r)
+    hearts = [module(QUIET + c, QUIET + r)
               for r, row in enumerate(qr.matrix) for c, v in enumerate(row)
               if v and not in_finder(r, c)]
     fin = "".join(finder(QUIET + fx, QUIET + fy) for fx, fy in finders)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {side} {side}">'
-            f'<path d="{" ".join(hearts)}" fill="{DARK}"/>'
-            f'<path d="{fin}" fill="{DARK}" fill-rule="evenodd"/></svg>')
+            f'<path d="{" ".join(hearts)}" fill="{ink}"/>'
+            f'<path d="{fin}" fill="{ink}" fill-rule="evenodd"/></svg>')
 
 
 def qr_side(url):
@@ -111,30 +119,54 @@ def qr_side(url):
     return n + 2 * QUIET
 
 
-def compose(url, out, px, variants=tuple(PALETTES)):
-    """Rendert die Szene einmal und setzt sie je Variante (Palette) zusammen; Ergebnis: {Variante: Pfad}."""
-    side = qr_side(url)
-    plan = layout.plan(int(side))
-    out = Path(out)
-    out.mkdir(parents=True, exist_ok=True)
-    qr_png = cairosvg.svg2png(bytestring=qr_svg(url, side).encode(),
-                              output_width=int(side * px), output_height=int(side * px))
-    qr = Image.open(io.BytesIO(qr_png)).convert("RGBA")
+def render_qr(url, side, px, pal):
+    """QR-Ebene als RGBA-Bild (Modul = Herz in der Karte oder gerundete Kachel in der Intarsie)."""
+    inlay = pal["style"] == "intarsie"
+    ink = "#%02x%02x%02x" % pal["ink"] if inlay else DARK
+    svg = qr_svg(url, side, tile if inlay else scaled_heart, ink)
+    png = cairosvg.svg2png(bytestring=svg.encode(), output_width=int(side * px), output_height=int(side * px))
+    return Image.open(io.BytesIO(png)).convert("RGBA")
+
+
+def finish(img, qr, box, px, pal):
+    """Setzt die QR-Ebene in das Hintergrundbild: als Karte (Innenschatten) oder eingelegt (Intarsie)."""
+    x0, y0 = box
+    if pal["style"] == "intarsie":
+        return engrave(img, qr, box, px, pal["ink"])
+    img = inner_shadow(img, (x0, y0, x0 + qr.width, y0 + qr.height), px)
+    img.paste(qr, box, qr)
+    return img
+
+
+def compose_style(url, side, out, px, style, names):
+    """Rendert die Szene eines Stils einmal und setzt sie je Variante (Palette) zusammen."""
+    plan = layout.plan(int(side), frame=INLAY_FRAME) if style == "intarsie" else layout.plan(int(side))
     left, top, _, _ = plan["view"]
     cx0, cy0 = plan["card"]
-    x0, y0 = round((cx0 - left) * px), round((top - (cy0 + side)) * px)
+    box = (round((cx0 - left) * px), round((top - (cy0 + side)) * px))
     with tempfile.TemporaryDirectory() as tmp:
         scene = Path(tmp) / "scene.png"
-        render_scene(plan, px, scene)
+        render_scene(plan, px, scene, style)
         beauty = Image.open(scene).convert("RGBA")
         shadow = Image.open(Path(tmp) / "scene-shadow.png").convert("RGBA")
     targets = {}
-    for name in variants:
+    for name in names:
         pal = PALETTES[name]
-        img = inner_shadow(backdrop(beauty, shadow, px, pal), (x0, y0, x0 + qr.width, y0 + qr.height), px)
-        img.paste(qr, (x0, y0), qr)
+        img = finish(backdrop(beauty, shadow, px, pal), render_qr(url, side, px, pal), box, px, pal)
         targets[name] = out / pal["file"]
         img.save(targets[name], dpi=(300, 300))
+    return targets
+
+
+def compose(url, out, px, variants=tuple(PALETTES)):
+    """Erzeugt die Varianten (je Stil eine Szene); Ergebnis: {Variante: Pfad}."""
+    side = qr_side(url)
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    targets = {}
+    for style in dict.fromkeys(PALETTES[v]["style"] for v in variants):
+        names = [v for v in variants if PALETTES[v]["style"] == style]
+        targets.update(compose_style(url, side, out, px, style, names))
     return targets
 
 
@@ -143,8 +175,10 @@ def main():
     ap.add_argument("url", nargs="?", default=URL)
     ap.add_argument("--out", default=str(HIER))
     ap.add_argument("--px", type=int, default=32, help="Pixel pro Modul (Bildbreite = 100 Module)")
+    ap.add_argument("--variante", nargs="+", choices=list(PALETTES), default=list(PALETTES),
+                    help="nur diese Varianten erzeugen (Standard: alle)")
     a = ap.parse_args()
-    for name, path in compose(a.url, a.out, a.px).items():
+    for name, path in compose(a.url, a.out, a.px, tuple(a.variante)).items():
         print(f"geschrieben ({name}): {path}")
 
 

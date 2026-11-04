@@ -13,6 +13,7 @@ const HTML = `<!doctype html><meta charset=utf-8><body style="margin:0;backgroun
 const r = await fetch('/cfg.json'); window.__png = await render(await r.json()); window.__done = true;</script>`;
 const FILES = {
   '/heart_scene.js': path.join(__dirname, 'heart_scene.js'),
+  '/heart_porcelain.js': path.join(__dirname, 'heart_porcelain.js'),
   '/three.module.js': path.join(cache, 'three.module.js'),
   '/RoomEnvironment.js': path.join(cache, 'RoomEnvironment.js'),
 };

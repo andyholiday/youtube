@@ -2,6 +2,7 @@
 // eingelassen in einen Messingrahmen, weicher Schlagschatten. Einheit: Modul, orthografisch von vorn.
 import * as THREE from 'three';
 import { RoomEnvironment } from '/RoomEnvironment.js';
+import { porcelain } from '/heart_porcelain.js';
 
 const RIM = 11;       // Breite der abgerundeten Wulst am Herzrand
 const RIM_H = 7;      // Hoehe der Wulst
@@ -43,16 +44,16 @@ function smoothRing(d, sigma = 14) {
 }
 
 // Polares Netz um den Schwerpunkt c; Hoehe aus dem (geglaetteten) Abstand zum Rand.
-function heartBody(pts, rings = 110) {
+function heartBody(pts, rings = 110, zOf = (x, y, d) => surfaceZ(d), soft = 1) {
   const n = pts.length;
   const ccw = signedArea(pts) > 0;
   const c = [0, pts.reduce((s, p) => s + p[1], 0) / n];
-  const pos = [c[0], c[1], surfaceZ(distToOutline(c[0], c[1], pts))];
+  const pos = [c[0], c[1], zOf(c[0], c[1], distToOutline(c[0], c[1], pts))];
   for (let k = 1; k <= rings; k++) {
     const s = 1 - Math.pow(1 - k / rings, 2.2);
     const xy = pts.map((p) => [c[0] + s * (p[0] - c[0]), c[1] + s * (p[1] - c[1])]);
-    const d = k === rings ? xy.map(() => 0) : smoothRing(xy.map(([x, y]) => distToOutline(x, y, pts)), 6 + 22 * s);
-    xy.forEach(([x, y], i) => pos.push(x, y, surfaceZ(d[i])));
+    const d = k === rings ? xy.map(() => 0) : smoothRing(xy.map(([x, y]) => distToOutline(x, y, pts)), soft * (6 + 22 * s));
+    xy.forEach(([x, y], i) => pos.push(x, y, zOf(x, y, d[i])));
   }
   const idx = [];
   const tri = (a, b, c2) => (ccw ? idx.push(a, b, c2) : idx.push(a, c2, b));
@@ -199,9 +200,12 @@ export async function render(cfg) {
   const cam = new THREE.OrthographicCamera(view.left, view.left + view.w, view.top, view.top - view.h, 1, 400);
   cam.position.set(0, 0, 200);
   cam.lookAt(0, 0, 0);
-  const mats = materials();
-  addLights(scene);
-  addHeart(scene, cfg, mats);
+  if (cfg.style === 'intarsie') {
+    porcelain(scene, cfg, { heartBody, heartBack, distToOutline });
+  } else {
+    addLights(scene);
+    addHeart(scene, cfg, materials());
+  }
   // Umgebungslicht je Material (envMapIntensity) statt global: Karte bleibt matt.
   scene.traverse((o) => { if (o.material) { o.material.envMap = env; o.material.needsUpdate = true; } });
   renderer.render(scene, cam);

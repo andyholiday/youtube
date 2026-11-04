@@ -90,5 +90,5 @@ def plan(side, frame=FRAME):
     left = card_x0 - round(card_x0 - (outline[:, 0].min() - 3))
     top = card_y0 + round(outline[:, 1].max() + 3 - card_y0)   # Oberkante des Ausschnitts
     height = round(-outline[:, 1].min() + 3 + 9)               # unten mehr Platz fuer Schatten
-    return {"outline": outline, "card": (card_x0, card_y0), "side": side, "margin": margin,
+    return {"outline": outline, "card": (card_x0, card_y0), "side": side, "frame": frame, "margin": margin,
             "view": (left, top, WIDTH, height)}
