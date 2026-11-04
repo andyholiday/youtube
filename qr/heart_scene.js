@@ -1,12 +1,14 @@
-// 3D-Szene: aufgeblasenes, glaenzendes Herz mit Perlenkranz, Goldrahmen fuer die QR-Karte,
-// schwebenden Herzchen und weichem Schlagschatten. Einheit: Modul, orthografisch von vorn.
+// 3D-Szene: bordeauxrotes Emaille-Herz (Cabochon) in gebuerstetem Messing-Fasenrand, die QR-Karte
+// eingelassen in einen Messingrahmen, weicher Schlagschatten. Einheit: Modul, orthografisch von vorn.
 import * as THREE from 'three';
 import { RoomEnvironment } from '/RoomEnvironment.js';
 
-const RIM = 9.5;      // Breite der abgerundeten Wulst am Herzrand
-const RIM_H = 6.5;    // Hoehe der Wulst
-const DOME = 3.0;     // zusaetzliche Woelbung zur Herzmitte
+const RIM = 11;       // Breite der abgerundeten Wulst am Herzrand
+const RIM_H = 7;      // Hoehe der Wulst
+const DOME = 8;       // zusaetzliche Woelbung zur Herzmitte
 const LIFT = 2.5;     // Herz schwebt knapp ueber dem Untergrund
+const BEZEL_TOP = 5.4;  // Oberkante des Fasenrands
+const BEZEL_BEVEL = 0.62;
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
@@ -24,7 +26,7 @@ function distToOutline(x, y, pts) {
 
 function surfaceZ(d) {
   const t = clamp01(d / RIM);
-  const q = clamp01((d - RIM) / 16);
+  const q = clamp01((d - RIM) / 30);
   return RIM_H * Math.sqrt(1 - (1 - t) * (1 - t)) + DOME * q * q * (3 - 2 * q);
 }
 
@@ -49,7 +51,7 @@ function heartBody(pts, rings = 110) {
   for (let k = 1; k <= rings; k++) {
     const s = 1 - Math.pow(1 - k / rings, 2.2);
     const xy = pts.map((p) => [c[0] + s * (p[0] - c[0]), c[1] + s * (p[1] - c[1])]);
-    const d = k === rings ? xy.map(() => 0) : smoothRing(xy.map(([x, y]) => distToOutline(x, y, pts)), 6 + 10 * s);
+    const d = k === rings ? xy.map(() => 0) : smoothRing(xy.map(([x, y]) => distToOutline(x, y, pts)), 6 + 22 * s);
     xy.forEach(([x, y], i) => pos.push(x, y, surfaceZ(d[i])));
   }
   const idx = [];
@@ -89,57 +91,14 @@ function plaque(cfg, zTop, gold) {
   outer.holes.push(roundedRect(cfg.side, 2.4, cfg.cx, cfg.cy));
   const geo = new THREE.ExtrudeGeometry(outer, {
     depth: zTop, bevelEnabled: true, bevelThickness: 0.55, bevelSize: 0.55, bevelOffset: -0.55,
-    bevelSegments: 8, curveSegments: 24,
+    bevelSegments: 2, curveSegments: 24,
   });
   const frame = new THREE.Mesh(geo, gold);
   const card = new THREE.Mesh(
     new THREE.ShapeGeometry(roundedRect(cfg.side + 1.6, 2.6, cfg.cx, cfg.cy, new THREE.Shape()), 24),
-    new THREE.MeshStandardMaterial({ color: 0xfffaf6, roughness: 1, metalness: 0, envMapIntensity: 0 }));
+    new THREE.MeshStandardMaterial({ color: 0xf8f4ec, roughness: 1, metalness: 0, envMapIntensity: 0 }));
   card.position.z = zTop - 1.1;
   return [frame, card];
-}
-
-function pearls(pts, mat, radius, inset, zAt, skip) {
-  const out = [];
-  // Orientierung des Umrisses: +1 gegen den Uhrzeigersinn (Innen liegt links der Laufrichtung)
-  const orient = signedArea(pts) > 0 ? 1 : -1;
-  const geo = new THREE.SphereGeometry(radius, 48, 32);
-  let acc = 0;
-  const placed = [];
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i], b = pts[(i + 1) % pts.length];
-    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    acc += len;
-    if (acc < radius * 2.15) continue;
-    acc = 0;
-    const px = a[0] - orient * (b[1] - a[1]) / len * inset;
-    const py = a[1] + orient * (b[0] - a[0]) / len * inset;
-    if (placed.some((q) => Math.hypot(q[0] - px, q[1] - py) < radius * 2.05)) continue;
-    if (skip(px, py)) continue;
-    placed.push([px, py]);
-    const m = new THREE.Mesh(geo, mat);
-    m.position.set(px, py, zAt(px, py) + radius * 0.35);
-    out.push(m);
-  }
-  return out;
-}
-
-function floaterGeometry(unit, size) {
-  const sh = new THREE.Shape(unit.map((p) => new THREE.Vector2(p[0] * size, p[1] * size)));
-  const g = new THREE.ExtrudeGeometry(sh, {
-    depth: size * 0.16, bevelEnabled: true, bevelThickness: size * 0.2, bevelSize: size * 0.14,
-    bevelOffset: -size * 0.1, bevelSegments: 12, curveSegments: 1,
-  });
-  g.translate(0, 0, -size * 0.2);
-  g.computeVertexNormals();
-  return g;
-}
-
-function glossy(color, extra = {}) {
-  return new THREE.MeshPhysicalMaterial({
-    color, roughness: 0.32, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.06,
-    sheen: 0.6, sheenColor: new THREE.Color(0xff8fb0), sheenRoughness: 0.4, envMapIntensity: 1.15, ...extra,
-  });
 }
 
 // Schlagschatten: Silhouette der Szene entlang der Lichtrichtung auf den Boden (z=0) geschert.
@@ -168,7 +127,7 @@ function makeRenderer(w, h) {
 }
 
 function addLights(scene) {
-  const sun = new THREE.DirectionalLight(0xfffaf6, 3.4);
+  const sun = new THREE.DirectionalLight(0xfff3e4, 3.4);
   sun.position.set(-55, 70, 90);
   sun.castShadow = true;
   sun.shadow.mapSize.set(4096, 4096);
@@ -176,50 +135,60 @@ function addLights(scene) {
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.05;
   sun.target.position.set(0, -45, 0);
-  scene.add(sun, sun.target, new THREE.HemisphereLight(0xffffff, 0xffeef0, 1.05));
+  scene.add(sun, sun.target, new THREE.HemisphereLight(0xffffff, 0x6a5a56, 0.9));
+}
+
+// Gebuerstetes Metall: waagerechte Schleifspuren als Rauheitstextur.
+function brushedMap() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let y = 0; y < 256; y++) {
+    const v = 205 + Math.floor(rnd() * 50);
+    g.fillStyle = `rgb(${v},${v},${v})`;
+    g.fillRect(0, y, 256, 1);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(1 / 16, 1 / 16);
+  return tex;
 }
 
 function materials() {
-  const pearl = new THREE.MeshPhysicalMaterial({
-    color: 0xfff3ee, roughness: 0.18, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05,
-    iridescence: 0.35, iridescenceIOR: 1.4, sheen: 0.5, sheenColor: new THREE.Color(0xffc9d8), envMapIntensity: 1.2 });
-  const gold = new THREE.MeshPhysicalMaterial({
-    color: 0xf5cf72, metalness: 1, roughness: 0.18, clearcoat: 0.6, clearcoatRoughness: 0.1, envMapIntensity: 2.0 });
-  return { pearl, gold, ruby: glossy(0xb30c36, { sheen: 0.25 }), rose: glossy(0xf48fab),
-    blush: glossy(0xffc2d0, { sheen: 0.3 }) };
+  const brass = new THREE.MeshPhysicalMaterial({
+    color: 0xae8f58, metalness: 1, roughness: 0.4, roughnessMap: brushedMap(), clearcoat: 0.15,
+    clearcoatRoughness: 0.3, envMapIntensity: 1.7 });
+  const enamel = new THREE.MeshPhysicalMaterial({
+    color: 0x520a1c, roughness: 0.22, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03,
+    specularIntensity: 0.6, envMapIntensity: 0.75 });
+  return { brass, enamel };
 }
 
-// Grosses Herz mit Perlenkranz und Goldrahmen; liefert die Gruppe und die Karte.
+// Fasenrand: Messingband entlang des Herzumrisses mit klaren 45-Grad-Fasen.
+function bezel(cfg, mat) {
+  const v2 = (pts) => pts.map((p) => new THREE.Vector2(p[0], p[1]));
+  const outer = new THREE.Shape(v2(cfg.outline));
+  outer.holes.push(new THREE.Path(v2(cfg.inner)));
+  const geo = new THREE.ExtrudeGeometry(outer, {
+    depth: BEZEL_TOP - BEZEL_BEVEL, bevelEnabled: true, bevelThickness: BEZEL_BEVEL, bevelSize: BEZEL_BEVEL,
+    bevelOffset: -BEZEL_BEVEL, bevelSegments: 1, curveSegments: 1,
+  });
+  return new THREE.Mesh(geo, mat);
+}
+
+// Grosses Herz mit Fasenrand und Rahmen fuer die QR-Karte.
 function addHeart(scene, cfg, mats) {
   const root = new THREE.Group();
   root.position.z = LIFT;
   scene.add(root);
-  root.add(new THREE.Mesh(heartBody(cfg.outline), mats.ruby), new THREE.Mesh(heartBack(cfg.outline), mats.ruby));
-  const [frame, card] = plaque(cfg.card, RIM_H + DOME + 1.8, mats.gold);
+  root.add(new THREE.Mesh(heartBody(cfg.outline), mats.enamel), new THREE.Mesh(heartBack(cfg.outline), mats.enamel));
+  root.add(bezel(cfg, mats.brass));
+  const [frame, card] = plaque(cfg.card, RIM_H + DOME + 0.8, mats.brass);
   root.add(frame, card);
-  const c = cfg.card;
-  const nearCard = (x, y) => Math.max(Math.abs(x - c.cx), Math.abs(y - c.cy)) < c.side / 2 + c.frame + 0.9;
-  root.add(...pearls(cfg.outline, mats.pearl, 1.25, 2.1, (x, y) => surfaceZ(distToOutline(x, y, cfg.outline)), nearCard));
   root.children.forEach((m) => { m.castShadow = true; m.receiveShadow = true; });
   card.receiveShadow = false;  // Karte bleibt gleichmaessig hell; Innenschatten kommt flach aus Python
-}
-
-// Schwebende Herzchen und verstreute Gold-/Perlkugeln.
-function addFloaters(scene, cfg, mats) {
-  const rad = Math.PI / 180;
-  for (const f of cfg.floaters) {
-    const m = new THREE.Mesh(floaterGeometry(cfg.unit, f.size), mats[f.mat]);
-    m.position.set(f.x, f.y, f.z);
-    m.rotation.set(f.rx * rad, f.ry * rad, f.rz * rad);
-    m.castShadow = m.receiveShadow = true;
-    scene.add(m);
-  }
-  for (const s of cfg.beads) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(s.r, 32, 24), mats[s.mat]);
-    m.position.set(s.x, s.y, s.z);
-    m.castShadow = true;
-    scene.add(m);
-  }
 }
 
 export async function render(cfg) {
@@ -233,7 +202,6 @@ export async function render(cfg) {
   const mats = materials();
   addLights(scene);
   addHeart(scene, cfg, mats);
-  addFloaters(scene, cfg, mats);
   // Umgebungslicht je Material (envMapIntensity) statt global: Karte bleibt matt.
   scene.traverse((o) => { if (o.material) { o.material.envMap = env; o.material.needsUpdate = true; } });
   renderer.render(scene, cam);

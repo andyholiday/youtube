@@ -1,4 +1,4 @@
-"""Prueft den 3D-Herz-QR: beide unabhaengigen Decoder (zxing-cpp, OpenCV) lesen die URL."""
+"""Prueft den 3D-Herz-QR (Varianten dunkel und hell): beide unabhaengigen Decoder (zxing-cpp, OpenCV) lesen die URL."""
 from pathlib import Path
 
 import cv2
@@ -8,15 +8,22 @@ import zxingcpp
 from PIL import Image, ImageFilter
 
 import make_qr
+from backdrop import PALETTES
 
 HIER = Path(__file__).parent
 
 
-@pytest.fixture(scope="module", params=["frisch erzeugt", "eingecheckt"])
-def png(request, tmp_path_factory):
-    if request.param == "eingecheckt":
-        return HIER / "herz-qr.png"
+@pytest.fixture(scope="module")
+def frisch(tmp_path_factory):
+    """Beide Varianten einmal frisch erzeugt (die Szene wird nur einmal gerendert)."""
     return make_qr.compose(make_qr.URL, tmp_path_factory.mktemp("qr"), 32)
+
+
+@pytest.fixture(params=[(v, q) for v in PALETTES for q in ("frisch erzeugt", "eingecheckt")],
+                ids=lambda p: f"{p[0]}-{p[1]}")
+def png(request, frisch):
+    variante, quelle = request.param
+    return frisch[variante] if quelle == "frisch erzeugt" else HIER / PALETTES[variante]["file"]
 
 
 def zxing(img):

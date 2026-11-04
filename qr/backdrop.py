@@ -1,18 +1,26 @@
-"""Hintergrund (zartes Rosé-Champagner mit Vignette) und weicher Schlagschatten."""
+"""Gedeckter Hintergrund (Verlauf mit feiner Koernung) und weicher Schlagschatten."""
+import cv2
 import numpy as np
 from PIL import Image, ImageFilter
 
-CENTER = np.array([255, 247, 244], np.float32)
-EDGE = np.array([244, 214, 221], np.float32)
-SHADOW = np.array([0.42, 0.20, 0.28], np.float32)   # Schattenfarbe (multipliziert)
+# Varianten: Verlauf Mitte/Rand (RGB), Schattenfarbe (multipliziert), Schattenstaerke, Koernung
+PALETTES = {
+    "dunkel": dict(file="herz-qr.png", center=(84, 79, 76), edge=(24, 23, 25),
+                   shadow=(0.15, 0.13, 0.14), strength=1.0, grain=2.4),
+    "hell": dict(file="herz-qr-hell.png", center=(233, 229, 221), edge=(190, 184, 175),
+                 shadow=(0.40, 0.35, 0.32), strength=1.0, grain=3.0),
+}
 
 
-def gradient(w, h):
-    """Radialer Verlauf, Mitte leicht ueber dem Bildmittelpunkt."""
+def gradient(w, h, pal):
+    """Radialer Verlauf, Mitte leicht ueber dem Bildmittelpunkt, mit feinem Korn (Stein/Leinen)."""
     y, x = np.mgrid[0:h, 0:w].astype(np.float32)
     r = np.hypot((x - w / 2) / (w * 0.72), (y - h * 0.46) / (h * 0.72))
     t = np.clip(r, 0, 1)[..., None] ** 1.6
-    return CENTER * (1 - t) + EDGE * t
+    bg = np.array(pal["center"], np.float32) * (1 - t) + np.array(pal["edge"], np.float32) * t
+    noise = np.random.default_rng(3).normal(0, 1, (h, w)).astype(np.float32)
+    noise = cv2.GaussianBlur(noise, (0, 0), 0.9) * 2.2
+    return bg + noise[..., None] * pal["grain"]
 
 
 def blurred(mask, sigma):
@@ -20,13 +28,13 @@ def blurred(mask, sigma):
     return np.asarray(img.filter(ImageFilter.GaussianBlur(sigma)), np.float32) / 255
 
 
-def compose(beauty, shadow, px):
+def compose(beauty, shadow, px, pal):
     """beauty/shadow: RGBA-PIL-Bilder gleicher Groesse; Ergebnis: RGB-PIL-Bild."""
     w, h = beauty.size
-    bg = gradient(w, h)
+    bg = gradient(w, h, pal)
     mask = np.asarray(shadow, np.float32)[..., 3] / 255
     dark = np.clip(0.30 * blurred(mask, 2.6 * px) + 0.22 * blurred(mask, 0.9 * px), 0, 0.6)[..., None]
-    bg = bg * (1 - dark * (1 - SHADOW))
+    bg = bg * (1 - dark * pal["strength"] * (1 - np.array(pal["shadow"], np.float32)))
     fg = np.asarray(beauty, np.float32) / 255
     a = fg[..., 3:4]
     out = bg * (1 - a) + fg[..., :3] * 255 * a

@@ -45,6 +45,20 @@ def resample(pts, n):
     return np.c_[np.interp(t, s, closed[:, 0]), np.interp(t, s, closed[:, 1])]
 
 
+def inset_outline(outline, dist, res=40):
+    """Umriss, der um dist Module nach innen versetzt ist (Rasterkontur, 1000 Punkte)."""
+    x0, y0 = outline.min(0)
+    x1, y1 = outline.max(0)
+    img = np.zeros((int((y1 - y0) * res) + 3, int((x1 - x0) * res) + 3), np.uint8)
+    cv2.fillPoly(img, [((outline - [x0, y0]) * res + 1).astype(np.int32)], 255)
+    inner = (cv2.distanceTransform(img, cv2.DIST_L2, 5) > dist * res).astype(np.uint8)
+    contours, _ = cv2.findContours(inner, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+    pts = (max(contours, key=cv2.contourArea)[:, 0, :].astype(np.float64) - 1) / res + [x0, y0]
+    pts = resample(pts, 1000)
+    return np.c_[[np.convolve(np.r_[pts[-2:, k], pts[:, k], pts[:2, k]], np.ones(5) / 5, "valid")
+                  for k in (0, 1)]].T
+
+
 def best_card_center(outline, side, res=4):
     """Mitte des Quadrats der Seite side, das den groessten Abstand zum Herzrand hat."""
     x0, y0 = outline.min(0)
