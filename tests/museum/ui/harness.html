@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><title>UI-Harness</title></head>
+<body>
+<script>
+// Prüfstand für ui.js ohne 3D: lädt die echte index.html (Struktur, Inline-Skripte, CSS) und tauscht
+// nur das Skript main.js gegen ein kleines Modul, das ausschließlich ui.js einbindet.
+// Parameter: ?bg=<Bild unter bg/> als Kulisse hinter der Oberfläche, ?fallback=<ms> wird an die Seite durchgereicht.
+(async () => {
+  const q = new URLSearchParams(location.search);
+  let html = await (await fetch('index.html')).text();
+  const main = '<script type="module" src="js/main.js"><\/script>';
+  if (!html.includes(main)) throw new Error('index.html bindet js/main.js nicht wie erwartet ein');
+  const harness = `<script type="module">
+    import { createUi } from './js/ui.js';
+    window.__events = [];
+    window.ui = createUi({
+      onEnter: () => window.__events.push('enter'),
+      onLightbox: (open) => window.__events.push(open ? 'lb:open' : 'lb:close'),
+    });
+    const data = await (await fetch('items.json')).json();
+    window.__items = data.erinnerungen;
+    window.__widmung = data.widmung;
+    const bg = ${JSON.stringify(q.get('bg') || '')};
+    if (bg) document.getElementById('szene').style.cssText += 'background:url(bg/' + bg + ') center/cover';
+    window.__ready = true;
+  <\/script>`;
+  document.open();
+  document.write(html.replace(main, harness));
+  document.close();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "erinnerungen": [
+    { "bild": "erinnerungen/2021-05-01_erster-ausflug.jpg", "titel": "Erster Ausflug", "datum": "2021-05-01", "text": "Ein sonniger Tag am See." },
+    { "bild": "erinnerungen/2022-02-14_valentinstag.jpg", "titel": "Valentinstag", "datum": "2022-02-14", "text": "Wir haben zusammen gekocht.\nUnd viel gelacht." },
+    { "bild": "erinnerungen/2023-06-12_unser-erster-urlaub.jpg", "titel": "", "datum": "2023-06-12", "text": "Italien, Pizza, Meer. Dieser Tag hatte keinen Namen, nur ein Datum, und er war trotzdem perfekt." },
+    { "bild": "erinnerungen/2023-12-24_weihnachten.jpg", "titel": "Weihnachten mit einem sehr langen Titel, der in mehrere Zeilen umbrechen muss", "datum": "2023-12-24", "text": "Der schönste Baum, den wir je hatten. Es hat geschneit, wir haben Plätzchen gebacken, zu viel gegessen und bis spät in die Nacht Karten gespielt. Die Kerzen brannten, und draußen war alles still. Ein langer Text soll in der Großansicht scrollbar bleiben, ohne dass das Bild oder die Knöpfe aus dem Bildschirm rutschen. Noch ein Satz, damit es wirklich lang wird, und noch einer, damit man sieht, wie der Umbruch aussieht." },
+    { "bild": "erinnerungen/2024-04-10_spaziergang.jpg", "titel": "Spaziergang im Frühling", "datum": "2024-04-10", "text": "Kirschblüten überall." },
+    { "bild": "erinnerungen/ohne-datum_zufallsfoto.jpg", "titel": "Zufallsfoto", "datum": null, "text": null },
+    { "bild": "erinnerungen/gibt-es-nicht.jpg", "titel": "Kaputtes Bild", "datum": "2024-05-01", "text": "Dieses Bild fehlt absichtlich." }
+  ],
+  "widmung": { "titel": "Für meine Liebste", "text": "Jede dieser Erinnerungen gehört uns.\nDanke für jeden Tag mit dir." }
+}

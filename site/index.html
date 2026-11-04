@@ -4,29 +4,48 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#f6f2ee">
+  <meta name="robots" content="noindex">
   <title>Für dich – unser Erinnerungsmuseum</title>
+  <script>
+    // Sofort entscheiden, ob Touch-Hinweise gelten, damit am Handy nie Desktop-Hinweise aufblitzen.
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.documentElement.classList.add('touch');
+  </script>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/lightbox.css">
   <script type="importmap">
-  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
+  { "imports": { "three": "./vendor/three.module.min.js" } }
   </script>
 </head>
 <body>
+  <script>
+    if (document.documentElement.classList.contains('touch')) document.body.classList.add('touch');
+  </script>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="herz-form" viewBox="0 0 32 29"><path d="M16 28C5 20 1 14 1 8.5 1 4 4.5 1 8.5 1 11.7 1 14.5 2.8 16 6 17.5 2.8 20.3 1 23.5 1 27.5 1 31 4 31 8.5 31 14 27 20 16 28Z"/></symbol>
+  </svg>
   <canvas id="szene" aria-label="3D-Erinnerungsmuseum"></canvas>
 
   <div id="joystick" aria-hidden="true"><div class="basis"><div class="knauf"></div></div></div>
-  <p id="hinweis" class="hinweis" hidden></p>
+  <p id="entdeckt" class="pille" hidden></p>
+  <p id="hinweis" class="hinweis" role="status" hidden></p>
   <p id="leer-hinweis" class="hinweis leer" hidden>
     Noch hängt hier nichts an den Wänden – bald füllt sich dieser Saal mit unseren Erinnerungen.
   </p>
+  <p id="raumtitel" class="raumtitel" role="status" hidden></p>
+  <button id="beschriftung" class="beschriftung" type="button" hidden>
+    <span id="bes-name" class="bes-name"></span><span id="bes-hint" class="bes-hint"></span>
+  </button>
 
   <section id="start" class="overlay">
     <div class="karte">
-      <h1>Für dich <svg class="herz" viewBox="0 0 32 29" aria-label="Herz"><path d="M16 28C5 20 1 14 1 8.5 1 4 4.5 1 8.5 1 11.7 1 14.5 2.8 16 6 17.500 2.8 20.300 1 23.500 1 27.500 1 31 4 31 8.500 31 14 27 20 16 28Z"/></svg></h1>
+      <h1><span id="start-titel">Für dich</span> <svg class="herz" aria-label="Herz" role="img"><use href="#herz-form"/></svg></h1>
       <p class="unter">Ein kleines Museum voller Erinnerungen.</p>
       <button id="start-btn" type="button" disabled>Lädt …</button>
+      <p id="lade" class="lade" role="status">Das Museum wird vorbereitet …</p>
+      <p id="lade-fehler" class="lade-fehler" role="alert" hidden>Das Museum lädt nicht – bitte Safari/Chrome aktualisieren oder Seite neu laden.</p>
       <ul class="hilfe">
-        <li class="nur-touch">Mit dem Joystick unten links laufen</li>
-        <li class="nur-touch">Mit dem Finger wischen, um dich umzuschauen</li>
+        <li class="nur-touch">Zum Laufen: links den Daumen aufsetzen und schieben</li>
+        <li class="nur-touch">Zum Umschauen: mit dem Finger wischen</li>
         <li class="nur-desktop">Laufen mit W A S D oder den Pfeiltasten</li>
         <li class="nur-desktop">Maus gedrückt halten und ziehen, um dich umzuschauen</li>
         <li>Ein Bild antippen, um es groß zu sehen</li>
@@ -35,17 +54,46 @@
   </section>
 
   <section id="lightbox" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="lb-titel">
+    <button id="lb-close" type="button" aria-label="Schließen">&times;</button>
     <article class="lb-karte">
-      <button id="lb-close" type="button" aria-label="Schließen">&times;</button>
-      <img id="lb-img" alt="">
-      <h2 id="lb-titel"></h2>
-      <p id="lb-datum" class="datum"></p>
-      <p id="lb-text" class="text"></p>
+      <div class="lb-bild">
+        <img id="lb-img" alt="">
+        <p id="lb-fehler" class="lb-fehler" role="alert" hidden>Dieses Bild konnte gerade nicht geladen werden.</p>
+        <button id="lb-prev" class="lb-pfeil lb-prev" type="button" aria-label="Vorheriges Bild">&#8249;</button>
+        <button id="lb-next" class="lb-pfeil lb-next" type="button" aria-label="Nächstes Bild">&#8250;</button>
+      </div>
+      <div class="lb-info">
+        <p id="lb-zaehler" class="lb-zaehler" aria-live="polite"></p>
+        <h2 id="lb-titel"></h2>
+        <p id="lb-datum" class="datum"></p>
+        <p id="lb-text" class="text"></p>
+      </div>
     </article>
   </section>
 
-  <p id="fehler" class="fehler" hidden>Dein Browser kann das 3D-Museum leider nicht anzeigen.</p>
+  <section id="finale" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="fin-titel">
+    <div class="fin-karte">
+      <svg class="herz gross" aria-hidden="true"><use href="#herz-form"/></svg>
+      <h2 id="fin-titel">Du hast alle Erinnerungen entdeckt</h2>
+      <p id="fin-text" class="fin-text"></p>
+      <button id="fin-btn" type="button">Weiter umsehen</button>
+    </div>
+  </section>
 
+  <p id="fehler" class="fehler" role="alert" hidden>Dein Browser kann das 3D-Museum leider nicht anzeigen.</p>
+
+  <script>
+    // Läuft unabhängig vom Modul: Ist der Knopf nach 12 s noch nicht bereit, steht dort ein Hinweis.
+    // Zum Testen: ?fallback=<Millisekunden>
+    (function () {
+      var p = new URLSearchParams(location.search).get('fallback');
+      var ms = p && /^\d+$/.test(p) ? Number(p) : 12000;
+      setTimeout(function () {
+        var b = document.getElementById('start-btn');
+        if (b && b.disabled) document.getElementById('lade-fehler').hidden = false;
+      }, ms);
+    })();
+  </script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

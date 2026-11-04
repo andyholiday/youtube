@@ -8,3 +8,8 @@ export function formatDatum(iso) {
   const monat = MONATE[Number(m[2]) - 1];
   return monat ? `${Number(m[3])}. ${monat} ${m[1]}` : '';
 }
+
+/** "Titel · 12. Juni 2023"; ohne Titel nur das Datum, ohne beides "". */
+export function nameUndDatum(item) {
+  return [String((item && item.titel) || '').trim(), formatDatum(item && item.datum)].filter(Boolean).join(' · ');
+}

@@ -51,4 +51,15 @@ for nr, (name, w, h, titel, datum, text, farben) in enumerate(EINTRAEGE, 1):
 for dateiname, liste in (("data-0.json", []), ("data-1.json", eintraege[:1]), ("data-7.json", eintraege)):
     with open(os.path.join(OUT, dateiname), "w", encoding="utf-8") as f:
         json.dump({"erinnerungen": liste}, f, ensure_ascii=False, indent=2)
+# 40 Einträge (10 Räume) für Speicher-/Dispose-Tests: die 7 Bilder wiederholt, jeder 5. Eintrag ohne Titel und Datum.
+viele = []
+for i in range(40):
+    basis = dict(eintraege[i % len(eintraege)])
+    if i % 5 == 4:
+        basis.update(titel="", datum=None, text=None)
+    else:
+        basis["titel"] = f"Erinnerung {i + 1}"
+    viele.append(basis)
+with open(os.path.join(OUT, "data-40.json"), "w", encoding="utf-8") as f:
+    json.dump({"widmung": {"titel": "Für dich", "text": "In Liebe, für alle Zeit."}, "erinnerungen": viele}, f, ensure_ascii=False, indent=2)
 print("Fixtures geschrieben:", OUT)

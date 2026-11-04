@@ -1,10 +1,12 @@
 import { GAP } from './layout.js';
 
-export const PLAYER_R = 0.45;
+const PLAYER_R = 0.45;
 export const EYE = 1.65;
 const SPEED = 3.2;
 const TURN = 1.8;
-const MAX_PITCH = 1.0;
+const MAX_PITCH = (35 * Math.PI) / 180;
+const SPRING_DELAY = 1.2; // Sekunden ohne Wischen, bevor der Blick zur Mitte zurückfedert
+const SPRING_TAU = 1.5; // Zeitkonstante des Zurückfederns (langsam)
 
 const inside = (r, x, z) => x >= r.x0 && x <= r.x1 && z >= r.z0 && z <= r.z1;
 
@@ -36,10 +38,18 @@ export function createWalkable(rooms, obstacles = []) {
   };
 }
 
+/** Hebt der Spieler den Blick nicht aktiv, federt der Neigungswinkel langsam zur Mitte zurück. */
+function springPitch(p, look, dt) {
+  if (look.pitch !== 0 || look.held) { p.idle = 0; return; }
+  p.idle = (p.idle || 0) + dt;
+  if (p.idle > SPRING_DELAY) p.pitch *= Math.exp(-dt / SPRING_TAU);
+}
+
 /** Bewegt den Spieler; move = {x: seitlich, y: vorwärts} je -1..1. Wände und Hindernisse halten ihn auf, an Wänden gleitet er entlang. */
 export function stepPlayer(p, move, turn, look, dt, walk) {
   p.yaw += turn * TURN * dt + look.yaw;
   p.pitch = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, p.pitch + look.pitch));
+  springPitch(p, look, dt);
   let { x: mx, y: my } = move;
   const len = Math.hypot(mx, my);
   if (len > 1) { mx /= len; my /= len; }

@@ -3,19 +3,33 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { execFileSync } = require('child_process');
 const { chromium, devices } = require('playwright');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
-const THREE_CACHE = path.join(__dirname, '.cache', 'three.module.js');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png' };
 
-function ensureThree() {
-  if (fs.existsSync(THREE_CACHE) && fs.statSync(THREE_CACHE).size > 100000) return;
-  fs.mkdirSync(path.dirname(THREE_CACHE), { recursive: true });
-  execFileSync('curl', ['-sSfL', '--max-time', '60', '-o', THREE_CACHE, THREE_URL]);
+// Spion auf dem ui-Objekt (läuft im Seitenkontext, vor main.js): zeichnet alle Aufrufe der Schnittstelle
+// aus .planning/SPEC-UI.md auf. Methoden, die ui.js noch nicht hat, werden durch Aufzeichner ersetzt.
+function uiSpyScript() {
+  const NAMES = ['setLoading', 'setReady', 'setItems', 'setWidmung', 'showEmptyHint', 'showFatal', 'showControlsHint',
+    'markInteracted', 'roomEntered', 'focusChanged', 'openLightbox'];
+  const calls = [];
+  const missing = [];
+  window.__uiCalls = calls;
+  window.__uiMissing = missing;
+  const plain = (a) => (a && typeof a === 'object' && 'theme' in a && 'id' in a ? { id: a.id, theme: a.theme } : a);
+  window.__museumUiHook = (ui) => new Proxy(ui, {
+    get(target, name) {
+      const real = target[name];
+      if (typeof name !== 'string' || (typeof real !== 'function' && !NAMES.includes(name))) return real;
+      if (typeof real !== 'function' && !missing.includes(name)) missing.push(name);
+      return (...args) => {
+        calls.push([name, ...args.map(plain)]);
+        return typeof real === 'function' ? real.apply(target, args) : undefined;
+      };
+    },
+  });
 }
 
 /** Serviert ein Verzeichnis auf einem freien Port. */
@@ -34,7 +48,7 @@ async function serve(dir, cleanup = false) {
   return { url, dir, close: () => new Promise((r) => server.close(() => { if (cleanup) fs.rmSync(dir, { recursive: true, force: true }); r(); })) };
 }
 
-/** Kopiert site/ + Fixtures in ein Temp-Verzeichnis und serviert es. dataFile: data-0|1|7.json */
+/** Kopiert site/ + Fixtures in ein Temp-Verzeichnis und serviert es. dataFile: data-0|1|7|40.json */
 async function startServer(dataFile) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'museum-'));
   fs.cpSync(path.join(ROOT, 'site'), dir, { recursive: true });
@@ -48,18 +62,20 @@ function launch() {
   return chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 }
 
-/** Neue Seite; mobile=true -> iPhone 13 (Hochformat, Touch). Sammelt Konsolenfehler in page.errors. */
-async function newPage(browser, { mobile = false } = {}) {
-  ensureThree();
-  const opts = mobile ? { ...devices['iPhone 13'] } : { viewport: { width: 1280, height: 800 } };
+/** Neue Seite; mobile=true -> iPhone 13 (Hochformat, Touch), landscape=true -> Querformat. Sammelt Konsolenfehler in page.errors. */
+async function newPage(browser, { mobile = false, landscape = false, spy = true } = {}) {
+  const opts = mobile ? { ...devices[landscape ? 'iPhone 13 landscape' : 'iPhone 13'] } : { viewport: { width: 1280, height: 800 } };
   const context = await browser.newContext(opts);
-  await context.route('https://cdn.jsdelivr.net/**', (route) => route.fulfill({
-    status: 200, contentType: 'text/javascript', body: fs.readFileSync(THREE_CACHE) }));
+  // Three.js liegt lokal in site/vendor/: jeder CDN-Zugriff wäre ein Fehler (und scheitert hier absichtlich).
+  await context.route('https://cdn.jsdelivr.net/**', (route) => route.abort());
   const page = await context.newPage();
   page.errors = [];
+  page.external = [];
+  page.on('request', (r) => { if (!r.url().startsWith('http://127.0.0.1') && !r.url().startsWith('data:')) page.external.push(r.url()); });
   page.on('console', (m) => { if (m.type() === 'error') page.errors.push(`console: ${m.text()}`); });
   page.on('pageerror', (e) => page.errors.push(`pageerror: ${e.message}`));
   page.on('requestfailed', (r) => page.errors.push(`requestfailed: ${r.url()}`));
+  if (spy) await page.addInitScript(uiSpyScript);
   page.cdp = mobile ? await context.newCDPSession(page) : null;
   return page;
 }
@@ -75,6 +91,12 @@ async function enter(page) {
   await page.waitForSelector('#start', { state: 'hidden' });
 }
 
+/** Aufgezeichnete ui-Aufrufe als [[Name, ...Argumente], ...]; filter: nur diesen Methodennamen. */
+const uiCalls = async (page, name) => {
+  const calls = await page.evaluate(() => window.__uiCalls);
+  return name ? calls.filter((c) => c[0] === name) : calls;
+};
+
 const pos = (page) => page.evaluate(() => window.__museum.pos);
 
 // Touch-Ereignisse über das DevTools-Protokoll (echte Multi-Touch-Sequenzen). points = alle aktuellen Finger.
@@ -85,4 +107,4 @@ const touch = {
   end: (page) => touch.send(page, 'touchEnd', []),
 };
 
-module.exports = { ROOT, serve, startServer, launch, newPage, openMuseum, enter, pos, touch };
+module.exports = { ROOT, serve, startServer, launch, newPage, openMuseum, enter, pos, touch, uiCalls };

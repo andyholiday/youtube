@@ -1,15 +1,15 @@
 // Raumfolge und Bildanordnung (Meter, y nach oben, Boden y = 0). Schnittstelle: .planning/SPEC-MUSEUM.md
 export const GAP = 0.3; // Spalt zwischen den Innenflächen benachbarter Räume
-export const DOOR_W = 2.6;
-export const DOOR_H = 4.0;
+const DOOR_W = 3.2;
+const DOOR_H = 4.0;
 const EDGE = 1.0; // Abstand Bildrahmen zur Ecke
 const DOOR_CLEAR = 0.9; // Abstand Bildrahmen zur Türkante
 const GAP_MIN = 0.4; // Mindestabstand zwischen zwei Bildern
 const PER_ROOM = 4;
 const MIN_INTERVAL = 1.2;
-const LONG = { L: 3.0, M: 1.8, S: 1.1 }; // lange Kante je Größenstufe
-const MAX_W = 3.4;
-const MAX_H = 2.8;
+const LONG = { L: 3.9, M: 2.35, S: 1.45 }; // lange Kante je Größenstufe (in 8 m hohen Räumen wirken Bilder sonst klein)
+const MAX_W = 4.4;
+const MAX_H = 3.65;
 const WIDTHS = [14, 16, 12, 17, 13, 15, 11, 18];
 const DEPTHS = [12, 15, 14, 11, 16, 13, 17, 12];
 const HEIGHTS = [8, 9, 7.5, 10, 8.5, 9.5, 7, 8];
@@ -94,7 +94,7 @@ const used = (iv) => iv.pics.reduce((s, p) => s + p.fw + GAP_MIN, 0);
 const free = (iv) => iv.b - iv.a - used(iv);
 
 /** Blickfang bevorzugt gegenüber dem Eingang, übrige Bilder dorthin, wo am meisten Platz ist. */
-function assign(ivs, pics, entryWall) {
+function assign(room, ivs, pics, entryWall) {
   const big = pics.find((p) => p.cls === 'L');
   if (big) {
     const score = (iv) => iv.b - iv.a + (iv.wall === OPPOSITE[entryWall] ? 3 : 0) - (iv.wall === entryWall ? 100 : 0);
@@ -102,7 +102,13 @@ function assign(ivs, pics, entryWall) {
     shrink(big, iv.b - iv.a - 2 * GAP_MIN);
     iv.pics.push(big);
   }
-  for (const p of pics.filter((q) => q !== big)) {
+  const rest = pics.filter((q) => q !== big);
+  // Mindestens ein Bild neben der Ausgangstür: Blick auf Tür und Bild zugleich (Start, Weitergehen).
+  const exit = room.doors.find((d) => d.to > room.id);
+  const beside = exit && ivs.filter((iv) => iv.wall === exit.wall && free(iv) >= rest[0].fw + GAP_MIN)
+    .reduce((best, cur) => (!best || free(cur) > free(best) ? cur : best), null);
+  if (beside && rest.length) beside.pics.push(rest.shift());
+  for (const p of rest) {
     const iv = ivs.reduce((best, cur) => (free(cur) > free(best) ? cur : best));
     shrink(p, free(iv) - GAP_MIN);
     iv.pics.push(p);
@@ -118,7 +124,7 @@ function toSlot(room, wall, along, pic) {
 
 function placeSlots(room, pics, entryWall) {
   const ivs = freeIntervals(room);
-  assign(ivs, pics, entryWall);
+  assign(room, ivs, pics, entryWall);
   for (const iv of ivs) {
     iv.pics.sort((p, q) => p.index - q.index);
     const gap = (iv.b - iv.a - iv.pics.reduce((s, p) => s + p.fw, 0)) / (iv.pics.length + 1);
@@ -170,4 +176,77 @@ export function buildLayout(items, themes) {
 export function startCandidates(room) {
   const cx = (room.x0 + room.x1) / 2;
   return [0, -2, 2, -4, 4].map((dx) => ({ x: cx + dx, z: room.z1 - 2.2, yaw: 0, pitch: -0.05 }));
+}
+
+// Start-Blick: Die Tür zum nächsten Raum und mindestens ein Bild müssen im Blick sein,
+// auch auf dem schmalsten Handy-Hochformat (horizontal ca. 40°, vertikal 80°).
+const VIEW_H = (20 * Math.PI) / 180; // halber horizontaler Öffnungswinkel
+const VIEW_V = (35 * Math.PI) / 180;
+const VIEW_MARGIN = 0.85;
+const FACING_MIN = 0.45; // Wandnormale gegen Blickrichtung: nicht zu schräg
+const START_PITCH = -0.03;
+const normAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const NORMAL = { n: [0, 1], s: [0, -1], w: [1, 0], e: [-1, 0] };
+
+function doorPoint(room, d) {
+  const along = d.center;
+  const x = d.wall === 'w' ? room.x0 : d.wall === 'e' ? room.x1 : along;
+  const z = d.wall === 'n' ? room.z0 : d.wall === 's' ? room.z1 : along;
+  return { x, y: d.height / 2, z, wall: d.wall };
+}
+
+/** Liegt der Punkt (auf einer Wand) im Blickfeld, schaut man nicht zu schräg darauf und ist die Sicht frei? */
+function seen(pose, eye, pt, canStand) {
+  const dx = pt.x - pose.x;
+  const dz = pt.z - pose.z;
+  const depth = -(dx * Math.sin(pose.yaw) + dz * Math.cos(pose.yaw));
+  const side = dx * Math.cos(pose.yaw) - dz * Math.sin(pose.yaw);
+  const dist = Math.hypot(dx, dz);
+  if (depth < 1 || dist < 2.5 || dist > 11) return false;
+  if (Math.abs(Math.atan2(side, depth)) > VIEW_H * VIEW_MARGIN) return false;
+  if (Math.abs(Math.atan2(pt.y - eye, depth) - pose.pitch) > VIEW_V * VIEW_MARGIN) return false;
+  const [nx, nz] = NORMAL[pt.wall];
+  if (-(dx * nx + dz * nz) / dist < FACING_MIN) return false;
+  for (let s = 0.25; s < dist - 1; s += 0.25) { // freie Sicht: nirgends Deko im Weg
+    if (!canStand(pose.x + (dx * s) / dist, pose.z + (dz * s) / dist)) return false;
+  }
+  return true;
+}
+
+/** Bester Blick von einem Standpunkt aus: mittig zwischen Tür und einem Bild. */
+function bestFrom(spot, door, pics, eye, canStand) {
+  const bearing = (t) => Math.atan2(-(t.x - spot.x), -(t.z - spot.z));
+  let best = null;
+  for (const p of pics) {
+    const yaw = door ? bearing(door) + normAngle(bearing(p) - bearing(door)) / 2 : bearing(p);
+    const pose = { x: spot.x, z: spot.z, yaw, pitch: START_PITCH };
+    if (door && !seen(pose, eye, door, canStand)) continue;
+    const count = pics.filter((q) => seen(pose, eye, q, canStand)).length;
+    if (count > 0 && (!best || count > best.count)) best = { pose, count };
+  }
+  return best;
+}
+
+/**
+ * Startpose im ersten Raum: Standpunkt und Blickrichtung so, dass die Tür zum nächsten Raum
+ * (falls vorhanden) und mindestens ein Bild im Blick sind. canStand(x, z) schließt Deko aus.
+ */
+export function startPose(room, canStand, eye = 1.65) {
+  const door = room.doors.find((d) => d.to === room.id + 1);
+  const doorPt = door && doorPoint(room, door);
+  const pics = room.slots.map((s) => ({ x: s.x, y: s.y, z: s.z, wall: s.wall }));
+  const home = { x: (room.x0 + room.x1) / 2, z: room.z1 - 2.2 };
+  let best = null;
+  for (let x = room.x0 + 1.5; x <= room.x1 - 1.5; x += 0.5) {
+    for (let z = room.z0 + 1.5; z <= room.z1 - 1.5; z += 0.5) {
+      if (!canStand(x, z)) continue;
+      const r = bestFrom({ x, z }, doorPt, pics, eye, canStand);
+      if (!r) continue;
+      const score = r.count * 10 - Math.hypot(x - home.x, z - home.z);
+      if (!best || score > best.score) best = { score, pose: r.pose };
+    }
+  }
+  if (best) return { x: best.pose.x, z: best.pose.z, yaw: best.pose.yaw, pitch: START_PITCH };
+  const fallback = startCandidates(room).find((p) => canStand(p.x, p.z)) || startCandidates(room)[0];
+  return { ...fallback };
 }

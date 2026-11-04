@@ -42,6 +42,7 @@ async function plain(name, fn) {
 }
 
 const D7 = 'data-7.json';
+const D40 = 'data-40.json';
 const hold = async (page, key, ms) => { await page.keyboard.down(key); await page.waitForTimeout(ms); await page.keyboard.up(key); };
 /** Taste halten, bis cond(window.__museum.pos) wahr ist (Bildrate im Software-Renderer schwankt). */
 async function holdUntil(page, key, cond, arg, timeout = 20000) {
@@ -54,19 +55,20 @@ const YAW = { n: 0, s: Math.PI, w: Math.PI / 2, e: -Math.PI / 2 }; // Blickricht
 const PLANE = (r, wall) => ({ n: r.z0, s: r.z1, w: r.x0, e: r.x1 })[wall];
 const FIELD = (wall) => (wall === 'n' || wall === 's' ? 'z' : 'x');
 
-async function joystickCenter(page) {
-  const b = await page.locator('#joystick .basis').boundingBox();
-  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+/** Punkt in der Joystick-Zone (unten links; Anteile von Breite/Höhe), wo der Daumen aufsetzt. */
+async function joystickCenter(page, fx = 0.2, fy = 0.8) {
+  return page.evaluate(([a, b]) => ({ x: innerWidth * a, y: innerHeight * b }), [fx, fy]);
 }
 
 /** Läuft in Richtung key, bis sich die Position nicht mehr ändert (Wand) oder timeout. */
 async function walkUntilStuck(page, key, field) {
   await page.keyboard.down(key);
   let prev = (await L.pos(page))[field];
-  for (let i = 0; i < 30; i++) {
+  let still = 0; // Ruckler (z. B. Textur-Upload im Software-Renderer) sind kein Stillstand: erst 3 gleiche Messungen zählen
+  for (let i = 0; i < 90 && still < 3; i++) {
     await page.waitForTimeout(400);
     const cur = (await L.pos(page))[field];
-    if (Math.abs(cur - prev) < 1e-6) break;
+    still = Math.abs(cur - prev) < 1e-6 ? still + 1 : 0;
     prev = cur;
   }
   await page.keyboard.up(key);
@@ -145,8 +147,8 @@ async function suiteLayout() {
   await plain('Bildgrößen: mindestens drei Stufen bei 7 Bildern, Blickfang groß, kleine klein', async () => {
     const sizes = layouts[7].flatMap((r) => r.slots.map((s) => C.longEdge(s)));
     assert.ok(C.distinctSizes(layouts[7]) >= 3, `nur ${C.distinctSizes(layouts[7])} Größen`);
-    assert.ok(Math.max(...sizes) >= 2.5 && Math.min(...sizes) <= 1.3, sizes.join(','));
-    for (const r of layouts[7]) assert.ok(r.slots.some((s) => C.longEdge(s) >= 2.5), `Raum ${r.id} ohne Blickfang`);
+    assert.ok(Math.max(...sizes) >= 3.2 && Math.min(...sizes) <= 1.7, sizes.join(','));
+    for (const r of layouts[7]) assert.ok(r.slots.some((s) => C.longEdge(s) >= 3.0), `Raum ${r.id} ohne Blickfang`);
   });
   await plain('Leere Liste: ein Raum, keine Tür, kein Bild', async () => {
     assert.strictEqual(layouts[0].length, 1);
@@ -244,6 +246,9 @@ async function suiteDesktop() {
       }
     }
   });
+}
+
+async function suiteDesktop2() {
   await test('Kollision: neben der Tür und an der Laibung hält die Wand (kein Durchlaufen im Spalt)', D7, false, async (page) => {
     await L.enter(page);
     const r = (await getRooms(page))[0];
@@ -275,12 +280,12 @@ async function suiteDesktop() {
 async function suiteMobile() {
   console.log('Steuerung Handy (iPhone 13, Touch)');
   await test('Handy: Joystick-Touch bewegt die Kamera, Loslassen stoppt', D7, true, async (page) => {
-    assert.ok(await page.locator('#joystick').isHidden(), 'Joystick vor dem Eintreten sichtbar');
     await L.enter(page);
-    assert.ok(await page.locator('#joystick').isVisible(), 'Joystick nach dem Eintreten nicht sichtbar');
+    assert.ok(!await page.locator('#joystick.aktiv').count(), 'Joystick aktiv ohne Touch');
     const c = await joystickCenter(page);
     const a = await L.pos(page);
     await L.touch.start(page, [{ x: c.x, y: c.y, id: 1 }]);
+    assert.ok(await page.locator('#joystick.aktiv').count(), 'Joystick nicht aktiv unter dem Daumen');
     await L.touch.move(page, [{ x: c.x, y: c.y - 40, id: 1 }]);
     await page.waitForTimeout(900);
     const b = await L.pos(page);
@@ -315,6 +320,9 @@ async function suiteMobile() {
     assert.ok(Math.hypot(b.x - a.x, b.z - a.z) > 0.1, 'Joystick bewegt nicht neben dem Wischen');
     assert.ok(Math.abs(b.yaw - a.yaw) > 0.2, 'Wischen neben dem Joystick ändert yaw nicht');
   });
+}
+
+async function suiteMobile2() {
   await test('Handy: Laufen gegen die Nordwand von Raum 0 bleibt in den Grenzen', D7, true, async (page) => {
     await L.enter(page);
     const r = (await getRooms(page))[0];
@@ -322,7 +330,8 @@ async function suiteMobile() {
     const c = await joystickCenter(page);
     await L.touch.start(page, [{ x: c.x, y: c.y, id: 1 }]);
     await L.touch.move(page, [{ x: c.x, y: c.y - 46, id: 1 }]);
-    await page.waitForTimeout(5000);
+    await page.waitForFunction((lim) => window.__museum.pos.z < lim, r.z0 + 0.75, { timeout: 40000, polling: 200 });
+    await page.waitForTimeout(1500); // an der Wand weiterdrücken: darf nicht durch
     const z = (await L.pos(page)).z;
     await L.touch.end(page);
     assert.ok(z > r.z0 + 0.3 && z < r.z0 + 0.7, `z=${z}, Wand bei ${r.z0}`);
@@ -387,6 +396,9 @@ async function suiteLightbox() {
     await page.mouse.click(q.x, q.y);
     await page.waitForSelector('#lightbox:not([hidden])', { timeout: 5000 });
   });
+}
+
+async function suiteLightbox3() {
   await test('Handy: Tippen öffnet Großansicht, Schließen per Knopf und Tippen daneben', D7, true, async (page) => {
     await L.enter(page);
     await page.evaluate(() => window.__museum.faceEntry(1));
@@ -404,6 +416,9 @@ async function suiteLightbox() {
     await page.locator('#lb-close').tap();
     await page.waitForSelector('#lightbox', { state: 'hidden' });
   });
+}
+
+async function suiteLightbox2() {
   await test('Handy: Wischen über ein Bild öffnet nichts (Bewegungsschwelle)', D7, true, async (page) => {
     await L.enter(page);
     await page.evaluate(() => window.__museum.faceEntry(0));
@@ -433,15 +448,23 @@ async function suiteLightbox() {
 
 (async () => {
   browser = await L.launch();
-  for (const d of ['data-0.json', 'data-1.json', D7]) servers[d] = await L.startServer(d);
+  for (const d of ['data-0.json', 'data-1.json', D7, D40]) servers[d] = await L.startServer(d);
   try {
     await loadLayouts();
     await suiteStart();
     await suiteLayout();
     await suiteWorld();
     await suiteDesktop();
+    await suiteDesktop2();
     await suiteMobile();
+    await suiteMobile2();
     await suiteLightbox();
+    await suiteLightbox2();
+    await suiteLightbox3();
+    // Kern v3: Fehlerpfade, ui-Anbindung, Speicher, Start-Blick, Joystick, Blick (eigene Dateien, damit run.js unter 500 Zeilen bleibt)
+    const h = { L, test, custom: plain, plain, browser, servers, D7, D40, hold, setPose };
+    await require('./kern-ui')(h);
+    await require('./kern-core')(h);
   } finally {
     await browser.close();
     for (const s of Object.values(servers)) await s.close();

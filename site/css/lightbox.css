@@ -1,0 +1,28 @@
+/* Großansicht: hell, ruhig, Bild vorn. Hochformat: Bild oben, Text darunter. */
+#lightbox { z-index: 20; background: rgba(28, 25, 31, .93); color: var(--tinte); padding: calc(var(--s-o) + 52px) var(--s-r) var(--s-u) var(--s-l); }
+.lb-karte { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 760px; max-height: 100%; overflow: hidden; background: #faf7f3; border-radius: 14px; box-shadow: 0 12px 48px rgba(0, 0, 0, .45); text-align: center; touch-action: pan-y; user-select: text; -webkit-user-select: text; }
+.lb-bild { position: relative; flex: none; display: flex; align-items: center; justify-content: center; min-height: 140px; min-width: 200px; background: #e9e3dc; }
+#lb-img { display: block; max-width: 100%; max-height: 52vh; max-height: 52dvh; object-fit: contain; transition: opacity .25s; }
+#lb-img.laedt { opacity: .35; }
+.lb-fehler { margin: 0; padding: 1.5em 3.5em; font-size: 1.05rem; line-height: 1.4; color: #6b1c17; }
+.lb-pfeil { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; padding: 0 0 4px; border: 0; border-radius: 50%; font-size: 2rem; line-height: 1; color: #fff; background: rgba(28, 25, 31, .68); cursor: pointer; }
+.lb-prev { left: 8px; }
+.lb-next { right: 8px; }
+.lb-info { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 20px 20px; }
+.lb-zaehler { margin: 0 0 .4em; font-size: .9rem; letter-spacing: .12em; color: #5c5560; }
+.lb-zaehler:empty { display: none; }
+#lb-titel { margin: 0; font-weight: 400; font-size: 1.6rem; line-height: 1.25; }
+#lb-titel:empty, .text:empty, .datum:empty { display: none; }
+.datum { margin: .25em 0 0; color: var(--akzent); letter-spacing: .06em; font-size: 1.05rem; }
+.text { margin: .9em auto 0; max-width: 34em; line-height: 1.55; font-size: 1.05rem; white-space: pre-wrap; text-align: left; }
+#lb-close { position: fixed; top: var(--s-o); right: var(--s-r); z-index: 2; width: 44px; height: 44px; padding: 0 0 3px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .5); font-size: 1.9rem; line-height: 1; color: #fff; background: rgba(28, 25, 31, .8); cursor: pointer; }
+
+/* Querformat am Handy: Bild links (bis ca. 90 % der Höhe), Titel und Text rechts. */
+@media (orientation: landscape) and (max-height: 500px) {
+  #lightbox { padding: var(--s-o) calc(var(--s-r) + 56px) var(--s-u) var(--s-l); }
+  .lb-karte { flex-direction: row; width: auto; max-width: 100%; max-height: min(90dvh, calc(100dvh - 24px)); }
+  .lb-bild { flex: 0 0 auto; min-width: 160px; }
+  #lb-img { max-height: min(90dvh, calc(100dvh - 24px)); max-width: calc(100vw - 440px); }
+  .lb-info { flex: 1 1 210px; min-width: 200px; max-width: 340px; text-align: left; padding: 16px 18px; }
+  #lb-titel { font-size: 1.35rem; }
+}

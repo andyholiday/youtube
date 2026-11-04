@@ -202,6 +202,22 @@ export function longAxis(room) {
   return room.x1 - room.x0 >= room.z1 - room.z0 ? 'x' : 'z';
 }
 
+const PLAQUE_PX = 1024;
+const PLAQUE_ZOOM = 1.2; // Schrift relativ zum Schild größer setzen, damit sie auch von weitem lesbar ist
+
+/**
+ * Zeichnet das Schild in doppelter Auflösung. Ohne Titel steht das Datum an dessen Stelle
+ * (größer gesetzt), sonst wären Titel und Datum je nach Thema leer bzw. klein.
+ */
+function drawPlaqueText(g, W, H, draw, titel, datum) {
+  const k = W / 512 * PLAQUE_ZOOM;
+  g.save();
+  g.scale(k, k);
+  if (titel) draw(g, W / k, H / k, titel, datum);
+  else draw(g, W / k, H / k, datum, '');
+  g.restore();
+}
+
 const planeCache = new Map();
 function plane(w, h) {
   const key = `${w}x${h}`;
@@ -214,9 +230,8 @@ function plane(w, h) {
  * zeichnet auf ein Canvas im Seitenverhältnis w:h. Die Mitte liegt im Ursprung, Blick nach +z.
  */
 export function plaqueObject(w, h, titel, datum, draw, textMat, plate) {
-  const W = 512, H = Math.round(512 * h / w);
-  const [c, g] = canvas(W, H);
-  draw(g, W, H, String(titel ?? ''), String(datum ?? ''));
+  const [c, g] = canvas(PLAQUE_PX, Math.round(PLAQUE_PX * h / w));
+  drawPlaqueText(g, c.width, c.height, draw, String(titel ?? '').trim(), String(datum ?? ''));
   const tex = toTexture(c);
   const group = new THREE.Group();
   let z = 0.004;

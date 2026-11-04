@@ -3,13 +3,10 @@
 const fs = require('fs');
 const path = require('path');
 const http = require('http');
-const { execFileSync } = require('child_process');
 const { chromium } = require('playwright');
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
 const SHOTS = path.join(__dirname, 'screenshots');
-const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js';
-const THREE_CACHE = path.join(ROOT, 'tests', 'museum', '.cache', 'three.module.js');
 const THEMES = ['modern', 'klassisch', 'futuristisch', 'garten'];
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 const MAX_TOTAL_BYTES = 3 * 1024 * 1024;
@@ -28,12 +25,6 @@ const VIEWS = {
 const results = [];
 let browser, server, base;
 
-function ensureThree() {
-  if (fs.existsSync(THREE_CACHE) && fs.statSync(THREE_CACHE).size > 100000) return;
-  fs.mkdirSync(path.dirname(THREE_CACHE), { recursive: true });
-  execFileSync('curl', ['-sSfL', '--max-time', '60', '-o', THREE_CACHE, THREE_URL]);
-}
-
 async function startServer() {
   server = http.createServer((req, res) => {
     const file = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
@@ -47,8 +38,7 @@ async function startServer() {
 
 async function newPage(viewport, dpr = 1) {
   const context = await browser.newContext({ viewport, deviceScaleFactor: dpr });
-  await context.route('https://cdn.jsdelivr.net/**', (route) => route.fulfill({
-    status: 200, contentType: 'text/javascript', body: fs.readFileSync(THREE_CACHE) }));
+  await context.route('https://cdn.jsdelivr.net/**', (route) => route.abort()); // Three.js liegt lokal in site/vendor/
   const page = await context.newPage();
   page.errors = [];
   page.on('console', (m) => { if (m.type() === 'error') page.errors.push(`console: ${m.text()}`); });
@@ -164,7 +154,6 @@ async function screenshotTests() {
 }
 
 (async () => {
-  ensureThree();
   await startServer();
   browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   try {

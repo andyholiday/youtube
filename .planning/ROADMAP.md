@@ -1,5 +1,5 @@
 # Roadmap
 
-**Stand (2026-11-04):** Museum v2 (4 Themenräume) integriert, Testlink aktualisiert; offen: Pages einschalten, Handy-Test und Herz-Wahl durch Andre.
+**Stand (2026-11-04):** v3 live (Review-Verbesserungen, weißes Herz, robuster Upload); offen: Andres Entscheidungen Datenschutz/Domain/Branch, echter Handy-Test.
 
 - [~] Erinnerungsmuseum mit Herz-QR (Test im Repo youtube)
