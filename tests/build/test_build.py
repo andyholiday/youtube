@@ -168,6 +168,20 @@ def test_workflow_yaml_gueltig():
     assert "default_branch" in wf["jobs"]["build"]["if"]
 
 
-def test_repo_platzhalter_bauen_und_klein():
-    bilder = list((WURZEL / "erinnerungen").glob("*.jpg"))
-    assert len(bilder) >= 8 and all(b.stat().st_size < 150_000 for b in bilder)
+def test_repo_erinnerungen_bauen_ohne_warnung(tmp_path, capsys):
+    quelle = WURZEL / "erinnerungen"
+    bilder = [p for p in quelle.iterdir() if p.suffix.lower() in build.BILD_ENDUNGEN]
+    assert len(bilder) >= 1
+    assert all(b.stat().st_size < 600_000 for b in bilder)
+    (tmp_path / "site").mkdir()
+    eintraege = build.baue(quelle, tmp_path / "site", tmp_path / "_site")
+    assert len(eintraege) == len(bilder)
+    assert capsys.readouterr().err == ""
+    assert all(e["datum"] is None or len(e["datum"]) == 10 for e in eintraege)
+
+
+def test_quellen_nennt_jedes_bild():
+    quelle = WURZEL / "erinnerungen"
+    quellen = (quelle / "QUELLEN.md").read_text(encoding="utf-8")
+    for bild_datei in quelle.glob("*.jpg"):
+        assert bild_datei.name in quellen

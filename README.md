@@ -51,7 +51,7 @@ python tools/build.py
 python -m http.server -d _site
 ```
 
-Dann <http://localhost:8000> öffnen. Die Platzhalterbilder entstehen mit
-`python tools/platzhalter.py` und können gelöscht werden, sobald echte Fotos da sind.
+Dann <http://localhost:8000> öffnen. `erinnerungen/` enthält Testfotos von Unsplash,
+siehe `erinnerungen/QUELLEN.md` – einfach löschen und eigene Fotos hochladen.
 
 Tests: `pip install pytest pyyaml && python -m pytest tests/build`
