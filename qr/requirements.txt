@@ -5,3 +5,5 @@ zxing-cpp>=2.2
 opencv-python-headless>=4.8
 pillow>=10
 numpy
+# Render-Skript: node mit global installiertem `playwright` (Chromium vorhanden);
+# Three.js 0.169.0 wird beim ersten Lauf von cdn.jsdelivr.net nach _cache/ geladen.

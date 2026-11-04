@@ -1,121 +1,182 @@
-"""Erzeugt einen QR-Code im Herz (SVG + PNG).
+"""Erzeugt den QR-Code im 3D-Herz (herz-qr.png).
 
-Aufruf:  python3 make_qr.py [URL] [--out ORDNER] [--breite PIXEL]
+Das Herz wird als 3D-Szene (Three.js, headless Chromium via Playwright) gerendert,
+der QR-Code danach flach und frontal in die Karte gesetzt.
+
+Aufruf:  python3 make_qr.py [URL] [--out ORDNER] [--px PIXEL_PRO_MODUL]
+Voraussetzung: node mit globalem `playwright` (Chromium vorhanden), Internet nur beim
+ersten Lauf (Three.js wird in _cache/ abgelegt).
 """
 import argparse
-import math
+import io
+import json
+import random
+import subprocess
+import tempfile
+import urllib.request
 from pathlib import Path
 
 import cairosvg
+import cv2
+import numpy as np
 import segno
+from PIL import Image
 
+import layout
+from backdrop import compose as backdrop, inner_shadow
+from sparkle import add_sparkles
+
+HIER = Path(__file__).parent
 URL = "https://andyholiday.github.io/youtube/"
-QUIET = 3.5       # Ruhezone in Modulen, innerhalb der hellen Fläche
-INNER_HALF = 8.0  # halbe Seite des größten Quadrats im Herz (Herzeinheiten)
-INNER_CY = -2.0   # dessen Mittelpunkt (y nach unten, Herzeinheiten)
-DARK = "#5b0c26"  # dunkles Weinrot, Kontrast zur weißen Fläche
+QUIET = 3.5          # Ruhezone in Modulen, innerhalb der hellen Karte
+DARK = "#3b0a1c"     # dunkles Weinrot, hoher Kontrast zur hellen Karte
+THREE = "https://cdn.jsdelivr.net/npm/three@0.169.0/"
+THREE_FILES = {"three.module.js": "build/three.module.js",
+               "RoomEnvironment.js": "examples/jsm/environments/RoomEnvironment.js"}
 HEART_BOX = ("M.5 .94C.5 .94 .02 .62 .02 .32C.02 .14 .16 .03 .3 .03"
              "C.41 .03 .5 .1 .5 .22C.5 .1 .59 .03 .7 .03C.84 .03 .98 .14 "
              ".98 .32C.98 .62 .5 .94 .5 .94Z")
+# schwebende Herzchen: Material, Groesse, Position (Module, y oben), Drehung in Grad
+FLOATERS = [
+    dict(mat="rose", size=13, x=-38, y=-80, z=16, rx=18, ry=-26, rz=14),
+    dict(mat="ruby", size=8, x=-43, y=-61, z=11, rx=-14, ry=22, rz=-18),
+    dict(mat="blush", size=10, x=39, y=-77, z=14, rx=16, ry=28, rz=-12),
+    dict(mat="gold", size=6, x=33, y=-92, z=9, rx=-22, ry=-18, rz=20),
+    dict(mat="ruby", size=5, x=44, y=-60, z=8, rx=12, ry=-24, rz=16),
+    dict(mat="gold", size=5.5, x=-44.5, y=-5, z=8, rx=15, ry=20, rz=-14),
+    dict(mat="blush", size=6.5, x=44.5, y=-4.5, z=10, rx=-16, ry=-24, rz=18),
+]
+SPARKLES = [(-22.5, -14, 3.6), (20, -14, 2.6), (-38, -78, 2.6), (40, -74, 3.0), (-30, -90, 1.6),
+            (-12, -90, 1.4), (30, -64, 1.8), (-45, -50, 2.0), (46, -45, 1.6), (0, -6, 1.8)]
 
 
-def big_heart(scale, steps=360):
-    """Umriss des großen Herzens als Punktliste (Modul-Einheiten, Mitte x=0)."""
-    pts = []
-    for i in range(steps):
-        t = 2 * math.pi * i / steps
-        x = 16 * math.sin(t) ** 3
-        y = (13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)
-             + 5 * (1 + math.cos(t)) / 2)  # letzter Term hebt die Kerbe an
-        pts.append((x * scale, -y * scale))
-    return pts
+def ensure_three():
+    """Lädt die fest versionierten Three.js-Dateien einmalig nach _cache/."""
+    cache = HIER / "_cache"
+    cache.mkdir(exist_ok=True)
+    for name, remote in THREE_FILES.items():
+        if not (cache / name).exists():
+            (cache / name).write_bytes(urllib.request.urlopen(THREE + remote).read())
+    return cache
 
 
-def scaled_heart(x, y, size=1.0):
-    """Kleines Herz (Pfad) im Feld (x, y) mit Kantenlänge size."""
-    nums = HEART_BOX.replace("C", " C ").replace("M", "M ").replace("Z", " Z").split()
+def beads(plan, seed=7, count=34):
+    """Kleine Gold- und Perlkugeln, verstreut ausserhalb des Herzens."""
+    rnd = random.Random(seed)
+    poly = (plan["outline"] * 100).astype(np.int32)
+    left, top, w, h = plan["view"]
+    out = []
+    while len(out) < count:
+        x, y = rnd.uniform(left + 2, left + w - 2), rnd.uniform(top - h + 2, top - 1)
+        inside = cv2.pointPolygonTest(poly, (float(x * 100), float(y * 100)), True) / 100
+        near = any(np.hypot(x - f["x"], y - f["y"]) < f["size"] * 0.9 for f in FLOATERS)
+        if inside > -5 or near or any(np.hypot(x - b["x"], y - b["y"]) < 4 for b in out):
+            continue
+        out.append(dict(x=x, y=y, z=rnd.uniform(3, 9), r=rnd.uniform(0.35, 0.8),
+                        mat=rnd.choice(["gold", "pearl"])))
+    return out
+
+
+def scene_config(plan, px):
+    left, top, w, h = plan["view"]
+    cx0, cy0 = plan["card"]
+    side = plan["side"]
+    unit = layout.heart_unit(24)
+    unit = (unit - [0, (unit[:, 1].max() + unit[:, 1].min()) / 2]) / 0.96
+    return {"px": px, "view": {"left": left, "top": top, "w": w, "h": h},
+            "outline": plan["outline"].tolist(), "unit": unit.tolist(),
+            "card": {"cx": cx0 + side / 2, "cy": cy0 + side / 2, "side": side, "frame": layout.FRAME},
+            "floaters": FLOATERS, "beads": beads(plan)}
+
+
+def render_scene(plan, px, target):
+    cache = ensure_three()
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "cfg.json"
+        cfg.write_text(json.dumps(scene_config(plan, px)))
+        subprocess.run(["node", str(HIER / "render_heart.js"), str(cfg), str(target), str(cache)],
+                       check=True, timeout=600)
+
+
+def scaled_heart(x, y):
+    """Kleines Herz (Pfad) im Modulfeld mit Ecke (x, y), Kantenlaenge 1."""
+    toks = HEART_BOX.replace("C", " C ").replace("M", "M ").replace("Z", " Z").split()
     out, k = [], 0
-    for tok in nums:
-        if tok in "MCZ":
+    for tok in toks:
+        if tok in ("M", "C", "Z"):
             out.append(tok)
             k = 0
             continue
-        for part in tok.replace("-", " -").split():
-            v = float(part)
-            out.append(f"{x + v * size:.3f}" if k % 2 == 0 else f"{y + v * size:.3f}")
-            k += 1
+        v = float(tok)
+        out.append(f"{x + v:.3f}" if k % 2 == 0 else f"{y + v:.3f}")
+        k += 1
     return " ".join(out)
 
 
 def rrect(x, y, w, r):
-    """Abgerundetes Quadrat als Pfad ."""
+    """Abgerundetes Quadrat als Pfad."""
     return (f"M{x + r:.3f} {y}H{x + w - r:.3f}A{r} {r} 0 0 1 {x + w} {y + r:.3f}"
             f"V{y + w - r:.3f}A{r} {r} 0 0 1 {x + w - r:.3f} {y + w}H{x + r:.3f}"
             f"A{r} {r} 0 0 1 {x} {y + w - r:.3f}V{y + r:.3f}A{r} {r} 0 0 1 {x + r:.3f} {y}Z")
 
 
 def finder(x, y):
-    """Finder-Pattern: Ring (7x7 mit Loch 5x5) und Kern 3x3, abgerundet.
-
-    Die Ecken des Rings sind nur leicht gerundet: OpenCVs Detektor verliert
-    das Finder-Pattern bei stärkerer Rundung, der Kern darf rund sein.
-    """
+    """Finder-Pattern; der Aussenring bleibt fast eckig (OpenCV verliert ihn sonst)."""
     return rrect(x, y, 7, 0.3) + rrect(x + 1, y + 1, 5, 0.8) + rrect(x + 2, y + 2, 3, 1.4)
 
 
-def build_svg(url):
+def qr_svg(url, side):
+    """Transparenter SVG-Block der Karte (Einheit Modul): nur dunkle Module."""
     qr = segno.make(url, error="h", boost_error=False)
     n = qr.symbol_size(border=0)[0]
-    panel = n + 2 * QUIET
-    scale = (panel / 2 + 1.5) / INNER_HALF
-    heart = big_heart(scale)
-    pad = 3
-    x0 = min(p[0] for p in heart) - pad
-    y0 = min(p[1] for p in heart) - pad
-    w = max(p[0] for p in heart) + pad - x0
-    h = max(p[1] for p in heart) + pad - y0
-    px, py = -panel / 2, INNER_CY * scale - panel / 2
-    qx, qy = px + QUIET, py + QUIET
-
+    assert n + 2 * QUIET == side, (n, side)
     finders = [(0, 0), (n - 7, 0), (0, n - 7)]
     in_finder = lambda r, c: any(fx - 1 <= c < fx + 8 and fy - 1 <= r < fy + 8 for fx, fy in finders)
-    hearts = [scaled_heart(qx + c, qy + r, 1.0)
+    hearts = [scaled_heart(QUIET + c, QUIET + r)
               for r, row in enumerate(qr.matrix) for c, v in enumerate(row)
               if v and not in_finder(r, c)]
-    finder_d = "".join(finder(qx + fx, qy + fy) for fx, fy in finders)
-    outline = "M" + "L".join(f"{x:.3f} {y:.3f}" for x, y in heart) + "Z"
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x0:.2f} {y0:.2f} {w:.2f} {h:.2f}">
-<title>QR-Code im Herz: {url}</title>
-<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-<stop offset="0" stop-color="#f2557f"/><stop offset="1" stop-color="#b3123f"/></linearGradient></defs>
-<rect x="{x0:.2f}" y="{y0:.2f}" width="{w:.2f}" height="{h:.2f}" fill="#fff"/>
-<path d="{outline}" fill="url(#g)"/>
-<rect x="{px:.3f}" y="{py:.3f}" width="{panel}" height="{panel}" rx="3" fill="#fff"/>
-<path d="{" ".join(hearts)}" fill="{DARK}"/>
-<path d="{finder_d}" fill="{DARK}" fill-rule="evenodd"/>
-</svg>
-'''
+    fin = "".join(finder(QUIET + fx, QUIET + fy) for fx, fy in finders)
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {side} {side}">'
+            f'<path d="{" ".join(hearts)}" fill="{DARK}"/>'
+            f'<path d="{fin}" fill="{DARK}" fill-rule="evenodd"/></svg>')
 
 
-def render(url, out, breite=2400):
-    """Schreibt herz-qr.svg und herz-qr.png in den Ordner out."""
+def qr_side(url):
+    n = segno.make(url, error="h", boost_error=False).symbol_size(border=0)[0]
+    return n + 2 * QUIET
+
+
+def compose(url, out, px):
+    side = qr_side(url)
+    plan = layout.plan(int(side))
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    svg = build_svg(url)
-    (out / "herz-qr.svg").write_text(svg, encoding="utf-8")
-    cairosvg.svg2png(bytestring=svg.encode(), write_to=str(out / "herz-qr.png"),
-                     output_width=breite)
-    return out / "herz-qr.svg", out / "herz-qr.png"
+    with tempfile.TemporaryDirectory() as tmp:
+        scene = Path(tmp) / "scene.png"
+        render_scene(plan, px, scene)
+        img = backdrop(Image.open(scene).convert("RGBA"),
+                       Image.open(Path(tmp) / "scene-shadow.png").convert("RGBA"), px)
+    left, top, _, _ = plan["view"]
+    img = add_sparkles(img, [((x - left) * px, (top - y) * px, s * px) for x, y, s in SPARKLES])
+    qr_png = cairosvg.svg2png(bytestring=qr_svg(url, side).encode(),
+                              output_width=int(side * px), output_height=int(side * px))
+    qr = Image.open(io.BytesIO(qr_png)).convert("RGBA")
+    cx0, cy0 = plan["card"]
+    x0, y0 = round((cx0 - left) * px), round((top - (cy0 + side)) * px)
+    img = inner_shadow(img, (x0, y0, x0 + qr.width, y0 + qr.height), px)
+    img.paste(qr, (x0, y0), qr)
+    target = out / "herz-qr.png"
+    img.save(target, dpi=(300, 300))
+    return target
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("url", nargs="?", default=URL)
-    ap.add_argument("--out", default=str(Path(__file__).parent))
-    ap.add_argument("--breite", type=int, default=2400, help="PNG-Breite in Pixeln")
+    ap.add_argument("--out", default=str(HIER))
+    ap.add_argument("--px", type=int, default=32, help="Pixel pro Modul (Bildbreite = 100 Module)")
     a = ap.parse_args()
-    svg, png = render(a.url, a.out, a.breite)
-    print(f"geschrieben: {svg}, {png}")
+    print(f"geschrieben: {compose(a.url, a.out, a.px)}")
 
 
 if __name__ == "__main__":
