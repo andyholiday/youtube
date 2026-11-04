@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Raumthemen-Vorschau</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#dfe6ee}canvas{display:block;width:100%;height:100%}</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import * as THREE from 'three';
+import { buildTheme, THEMES } from '/site/js/themes/index.js';
+import { ROOMS, makeSlots } from './rooms.js';
+import { runChecks } from './checks.js';
+
+// Globales Licht wie in SPEC-MUSEUM.md (main.js setzt es später genauso).
+export const LIGHT = { hemi: 1.75, ambient: 0.7, exposure: 1.0 };
+
+function art(i) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  const pal = [['#f2a65a', '#e8505b', '#3d405b'], ['#a8dadc', '#457b9d', '#1d3557'], ['#f4d35e', '#ee964b', '#0d3b66'],
+    ['#cdb4db', '#ffafcc', '#a2d2ff'], ['#8ecae6', '#219ebc', '#023047'], ['#e9c46a', '#2a9d8f', '#264653']][i % 6];
+  const grad = g.createLinearGradient(0, 0, 256, 256);
+  grad.addColorStop(0, pal[0]); grad.addColorStop(0.55, pal[1]); grad.addColorStop(1, pal[2]);
+  g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.arc(70 + (i * 37) % 120, 90, 46, 0, 7); g.fill();
+  g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, 170 + (i % 3) * 10, 256, 90);
+  return new THREE.CanvasTexture(c);
+}
+
+const TITLES = ['Strand bei Sonnenuntergang', 'Unser erster Urlaub', 'Hochzeit', 'Kaffee am Morgen', 'Wanderung in den Bergen',
+  'Ein sehr langer Titel für eine Erinnerung an einen schönen Tag'];
+const DATES = ['12. Juni 2021', '3. August 2019', '', '1. Januar 2024', '27. Mai 2022', '14. Februar 2023'];
+
+function addPictures(scene, room, theme) {
+  const slots = room.slots;
+  slots.forEach((s, i) => {
+    const holder = new THREE.Group();
+    const rot = { n: 0, s: Math.PI, w: Math.PI / 2, e: -Math.PI / 2 }[s.wall];
+    holder.position.set(s.x, s.y, s.z);
+    holder.rotation.y = rot;
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(s.w, s.h), new THREE.MeshBasicMaterial({ map: art(i) }));
+    pic.position.z = 0.003;
+    holder.add(pic, theme.frame(s.w, s.h));
+    const pl = theme.plaque(TITLES[i % TITLES.length], DATES[i % DATES.length]);
+    pl.position.set(0, -s.h / 2 - 0.42, 0);
+    holder.add(pl);
+    scene.add(holder);
+  });
+}
+
+function setup(canvas, w, h, dpr) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(w, h, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = LIGHT.exposure;
+  renderer.shadowMap.enabled = false;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xdfe6ee);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xf0eadf, LIGHT.hemi), new THREE.AmbientLight(0xffffff, LIGHT.ambient));
+  return { renderer, scene };
+}
+
+function fullRoom(key) {
+  const room = { ...ROOMS[key] };
+  room.slots = makeSlots(room);
+  return room;
+}
+
+const q = new URLSearchParams(location.search);
+const vec = (s, d) => (s ? s.split(',').map(Number) : d);
+const canvas = document.getElementById('c');
+const W = innerWidth, H = innerHeight;
+const { renderer, scene } = setup(canvas, W, H, Math.min(Number(q.get('dpr') || devicePixelRatio), 2));
+
+window.__api = {
+  THREE, THEMES, ROOMS, buildTheme, makeSlots, fullRoom, scene, renderer,
+  runChecks: (theme, key, roomOverride) => runChecks(THREE, buildTheme, theme, roomOverride || fullRoom(key)),
+};
+
+const themeName = q.get('theme') || 'modern';
+if (THEMES.includes(themeName)) {
+  const roomKey = q.get('room') || 'a';
+  const room = fullRoom(roomKey);
+  const t0 = performance.now();
+  const theme = buildTheme(themeName, room);
+  window.__buildMs = performance.now() - t0;
+  scene.add(theme.group);
+  addPictures(scene, room, theme);
+  const cam = new THREE.PerspectiveCamera(Number(q.get('fov') || 70), W / H, 0.1, 120);
+  const cx = (room.x0 + room.x1) / 2, cz = (room.z0 + room.z1) / 2;
+  const p = vec(q.get('cam'), [room.x0 + 1.5, 1.65, room.z1 - 1.5]);
+  cam.position.set(...p);
+  cam.lookAt(...vec(q.get('look'), [cx + 2, 3.2, cz - 2]));
+  renderer.render(scene, cam);
+  requestAnimationFrame(() => { renderer.render(scene, cam); window.__ready = true; });
+} else {
+  window.__ready = true;
+}
+</script>
+</body>
+</html>

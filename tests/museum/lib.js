@@ -18,13 +18,8 @@ function ensureThree() {
   execFileSync('curl', ['-sSfL', '--max-time', '60', '-o', THREE_CACHE, THREE_URL]);
 }
 
-/** Kopiert site/ + Fixtures in ein Temp-Verzeichnis und serviert es. dataFile: data-0|1|7.json */
-async function startServer(dataFile) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'museum-'));
-  fs.cpSync(path.join(ROOT, 'site'), dir, { recursive: true });
-  const fx = path.join(__dirname, 'fixtures');
-  fs.cpSync(path.join(fx, 'erinnerungen'), path.join(dir, 'erinnerungen'), { recursive: true });
-  fs.copyFileSync(path.join(fx, dataFile), path.join(dir, 'erinnerungen.json'));
+/** Serviert ein Verzeichnis auf einem freien Port. */
+async function serve(dir, cleanup = false) {
   const server = http.createServer((req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]).replace(/\/$/, '/index.html');
     const file = path.join(dir, rel);
@@ -36,7 +31,17 @@ async function startServer(dataFile) {
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${server.address().port}/`;
-  return { url, dir, close: () => new Promise((r) => server.close(() => { fs.rmSync(dir, { recursive: true, force: true }); r(); })) };
+  return { url, dir, close: () => new Promise((r) => server.close(() => { if (cleanup) fs.rmSync(dir, { recursive: true, force: true }); r(); })) };
+}
+
+/** Kopiert site/ + Fixtures in ein Temp-Verzeichnis und serviert es. dataFile: data-0|1|7.json */
+async function startServer(dataFile) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'museum-'));
+  fs.cpSync(path.join(ROOT, 'site'), dir, { recursive: true });
+  const fx = path.join(__dirname, 'fixtures');
+  fs.cpSync(path.join(fx, 'erinnerungen'), path.join(dir, 'erinnerungen'), { recursive: true });
+  fs.copyFileSync(path.join(fx, dataFile), path.join(dir, 'erinnerungen.json'));
+  return serve(dir, true);
 }
 
 function launch() {
@@ -80,4 +85,4 @@ const touch = {
   end: (page) => touch.send(page, 'touchEnd', []),
 };
 
-module.exports = { ROOT, startServer, launch, newPage, openMuseum, enter, pos, touch };
+module.exports = { ROOT, serve, startServer, launch, newPage, openMuseum, enter, pos, touch };
