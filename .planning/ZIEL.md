@@ -21,3 +21,10 @@ beiden. Andre kann die Erinnerungen (Bilder) selbst hochladen.
 3. Neues Bild in `erinnerungen/` hochladen → nach Push baut eine Action die Seite neu
    und das Bild hängt im Museum. Keine Codeänderung nötig.
 4. Jedes Paket hat Tests, die laufen und grün sind.
+
+## Nachtrag 2026-11-04 (Andres Feedback zum ersten Museum)
+„Heller, moderner, Decken viel, viel höher, Bilder unterschiedlich groß, man kann um die
+Ecken gehen, unterschiedliche Räume mit unterschiedlichen Themen (z. B. futuristisch,
+klassisch).“ Danach wieder ein Testlink.
+5. Mehrere Räume mit je eigenem Thema, verbunden durch Durchgänge, Weg mit Ecken.
+6. Deutlich heller, Decken ≥ 7 m, Bilder in mindestens drei Größen.
