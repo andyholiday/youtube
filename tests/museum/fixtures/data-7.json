@@ -1,0 +1,60 @@
+{
+  "erinnerungen": [
+    {
+      "bild": "erinnerungen/2021-05-01_erster-ausflug.jpg",
+      "titel": "Erster Ausflug",
+      "datum": "2021-05-01",
+      "text": "Ein sonniger Tag am See.",
+      "breite": 1600,
+      "hoehe": 1200
+    },
+    {
+      "bild": "erinnerungen/2022-02-14_valentinstag.jpg",
+      "titel": "Valentinstag",
+      "datum": "2022-02-14",
+      "text": "Wir haben zusammen gekocht.\nUnd viel gelacht.",
+      "breite": 1200,
+      "hoehe": 1600
+    },
+    {
+      "bild": "erinnerungen/2022-08-20_quadrat.jpg",
+      "titel": "Sommerabend auf dem Balkon",
+      "datum": "2022-08-20",
+      "text": null,
+      "breite": 1200,
+      "hoehe": 1200
+    },
+    {
+      "bild": "erinnerungen/2023-06-12_unser-erster-urlaub.jpg",
+      "titel": "Unser erster Urlaub mit einem sehr langen Titel, der nicht aufs Schild passt",
+      "datum": "2023-06-12",
+      "text": "Italien, Pizza, Meer.",
+      "breite": 1600,
+      "hoehe": 900
+    },
+    {
+      "bild": "erinnerungen/2023-12-24_weihnachten.jpg",
+      "titel": "Weihnachten",
+      "datum": "2023-12-24",
+      "text": "Der schönste Baum.",
+      "breite": 900,
+      "hoehe": 1600
+    },
+    {
+      "bild": "erinnerungen/2024-04-10_spaziergang.jpg",
+      "titel": "Spaziergang im Frühling",
+      "datum": "2024-04-10",
+      "text": "Kirschblüten überall.",
+      "breite": 1500,
+      "hoehe": 1000
+    },
+    {
+      "bild": "erinnerungen/ohne-datum_zufallsfoto.jpg",
+      "titel": "Zufallsfoto",
+      "datum": null,
+      "text": "Ohne Datum, aber nicht ohne Herz.",
+      "breite": 1000,
+      "hoehe": 1500
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#2b1a14">
+  <title>Für dich – unser Erinnerungsmuseum</title>
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="szene" aria-label="3D-Erinnerungsmuseum"></canvas>
+
+  <div id="joystick" aria-hidden="true"><div class="basis"><div class="knauf"></div></div></div>
+  <p id="hinweis" class="hinweis" hidden></p>
+  <p id="leer-hinweis" class="hinweis leer" hidden>
+    Noch hängt hier nichts an den Wänden – bald füllt sich dieser Saal mit unseren Erinnerungen.
+  </p>
+
+  <section id="start" class="overlay">
+    <div class="karte">
+      <h1>Für dich <svg class="herz" viewBox="0 0 32 29" aria-label="Herz"><path d="M16 28C5 20 1 14 1 8.5 1 4 4.5 1 8.5 1 11.7 1 14.5 2.8 16 6 17.500 2.8 20.300 1 23.500 1 27.500 1 31 4 31 8.500 31 14 27 20 16 28Z"/></svg></h1>
+      <p class="unter">Ein kleines Museum voller Erinnerungen.</p>
+      <button id="start-btn" type="button" disabled>Lädt …</button>
+      <ul class="hilfe">
+        <li class="nur-touch">Mit dem Joystick unten links laufen</li>
+        <li class="nur-touch">Mit dem Finger wischen, um dich umzuschauen</li>
+        <li class="nur-desktop">Laufen mit W A S D oder den Pfeiltasten</li>
+        <li class="nur-desktop">Maus gedrückt halten und ziehen, um dich umzuschauen</li>
+        <li>Ein Bild antippen, um es groß zu sehen</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="lightbox" class="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="lb-titel">
+    <article class="lb-karte">
+      <button id="lb-close" type="button" aria-label="Schließen">&times;</button>
+      <img id="lb-img" alt="">
+      <h2 id="lb-titel"></h2>
+      <p id="lb-datum" class="datum"></p>
+      <p id="lb-text" class="text"></p>
+    </article>
+  </section>
+
+  <p id="fehler" class="fehler" hidden>Dein Browser kann das 3D-Museum leider nicht anzeigen.</p>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

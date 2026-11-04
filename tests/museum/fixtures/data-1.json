@@ -1,0 +1,12 @@
+{
+  "erinnerungen": [
+    {
+      "bild": "erinnerungen/2021-05-01_erster-ausflug.jpg",
+      "titel": "Erster Ausflug",
+      "datum": "2021-05-01",
+      "text": "Ein sonniger Tag am See.",
+      "breite": 1600,
+      "hoehe": 1200
+    }
+  ]
+}
