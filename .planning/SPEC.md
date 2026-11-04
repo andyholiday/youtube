@@ -39,6 +39,7 @@ Ziel-URL der Seite: `https://andyholiday.github.io/youtube/`
 ```
 - Sortierung: mit Datum aufsteigend zuerst, danach ohne Datum nach Dateiname.
 - `bild` ist relativ zu `index.html`.
+- Optional oberste Ebene `"widmung": {"titel": "…", "text": "…"}` aus `erinnerungen/widmung.txt` (erste Zeile `# Titel`, Rest Text); fehlt die Datei → kein Schlüssel.
 - Leere Liste ist gültig.
 - `titel` darf `""` sein (generischer Kamera-Dateiname wie `IMG_1234`); die Seite zeigt dann nur das Datum.
 - `bild` darf einen Cache-Parameter tragen (`…jpg?v=<hash>`).
