@@ -1,34 +1,12 @@
 import json
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 import yaml
 from PIL import Image
 
-WURZEL = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(WURZEL / "tools"))
-import build  # noqa: E402
-
-
-@pytest.fixture
-def dirs(tmp_path):
-    erinnerungen, site, out = tmp_path / "erinnerungen", tmp_path / "site", tmp_path / "_site"
-    erinnerungen.mkdir()
-    site.mkdir()
-    (site / "index.html").write_text("<html></html>")
-    return erinnerungen, site, out
-
-
-def bild(pfad, groesse=(100, 60), fmt=None, **kw):
-    Image.new("RGB", groesse, (200, 100, 50)).save(pfad, fmt, **kw)
-
-
-def lauf(dirs):
-    erinnerungen, site, out = dirs
-    build.baue(erinnerungen, site, out)
-    return json.loads((out / "erinnerungen.json").read_text(encoding="utf-8"))["erinnerungen"]
+from hilfen import WURZEL, ausgabe_pfad, bild, build, lauf
 
 
 @pytest.mark.parametrize("stem,datum,titel", [
@@ -64,7 +42,7 @@ def test_ohne_txt_text_null(dirs):
 def test_sortierung(dirs):
     for name in ["b.jpg", "a.jpg", "2024-05-01_x.jpg", "2023-01-01_y.jpg"]:
         bild(dirs[0] / name)
-    assert [e["bild"] for e in lauf(dirs)] == [
+    assert [e["bild"].split("?")[0] for e in lauf(dirs)] == [
         "erinnerungen/2023-01-01_y.jpg", "erinnerungen/2024-05-01_x.jpg",
         "erinnerungen/a.jpg", "erinnerungen/b.jpg"]
 
@@ -81,24 +59,24 @@ def test_exif_rotation_hochkant(dirs):
         assert not ausgabe.getexif()  # EXIF entfernt
 
 
-def test_verkleinerung_max_1600(dirs):
+def test_verkleinerung_max_1280(dirs):
     bild(dirs[0] / "gross.jpg", (3200, 2400))
     bild(dirs[0] / "hoch.jpg", (1000, 4000))
     bild(dirs[0] / "klein.jpg", (300, 200))
     e = {x["titel"]: x for x in lauf(dirs)}
-    assert (e["gross"]["breite"], e["gross"]["hoehe"]) == (1600, 1200)
-    assert (e["hoch"]["breite"], e["hoch"]["hoehe"]) == (400, 1600)
+    assert (e["gross"]["breite"], e["gross"]["hoehe"]) == (1280, 960)
+    assert (e["hoch"]["breite"], e["hoch"]["hoehe"]) == (320, 1280)
     assert (e["klein"]["breite"], e["klein"]["hoehe"]) == (300, 200)  # nie vergrößert
     with Image.open(dirs[2] / "erinnerungen" / "gross.jpg") as i:
-        assert max(i.size) == 1600
+        assert max(i.size) == 1280
 
 
 @pytest.mark.parametrize("name,fmt", [("a.png", "PNG"), ("b.WEBP", "WEBP"), ("c.jpeg", "JPEG")])
 def test_formate_werden_jpg(dirs, name, fmt):
     bild(dirs[0] / name, fmt=fmt)
     e = lauf(dirs)
-    assert e[0]["bild"].endswith(".jpg")
-    with Image.open(dirs[2] / e[0]["bild"]) as i:
+    assert e[0]["bild"].split("?")[0].endswith(".jpg")
+    with Image.open(ausgabe_pfad(dirs, e[0])) as i:
         assert i.format == "JPEG"
 
 
@@ -156,7 +134,7 @@ def test_schluessel_und_cli(dirs):
     assert r.returncode == 0, r.stderr
     e = json.loads((dirs[2] / "erinnerungen.json").read_text())["erinnerungen"][0]
     assert set(e) == {"bild", "titel", "datum", "text", "breite", "hoehe"}
-    assert (dirs[2] / e["bild"]).is_file()
+    assert ausgabe_pfad(dirs, e).is_file()
 
 
 def test_workflow_yaml_gueltig():
@@ -171,7 +149,8 @@ def test_workflow_yaml_gueltig():
 def test_repo_erinnerungen_bauen_ohne_warnung(tmp_path, capsys):
     quelle = WURZEL / "erinnerungen"
     bilder = [p for p in quelle.iterdir() if p.suffix.lower() in build.BILD_ENDUNGEN]
-    assert len(bilder) >= 1
+    if not bilder:
+        pytest.skip("keine Testfotos mehr in erinnerungen/")
     assert all(b.stat().st_size < 600_000 for b in bilder)
     (tmp_path / "site").mkdir()
     eintraege = build.baue(quelle, tmp_path / "site", tmp_path / "_site")

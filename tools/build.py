@@ -1,119 +1,155 @@
 #!/usr/bin/env python3
 """Baut die Seite: site/ -> _site/, erinnerungen/ -> verkleinerte JPGs + erinnerungen.json."""
 import argparse
-import datetime
 import json
+import os
 import re
 import shutil
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from bilder import BILD_ENDUNGEN, MAX_KANTE, inhalts_hash, verkleinere  # noqa: F401
+from namen import finde_txt, lese_text, lese_widmung, parse_name  # noqa: F401
 
-BILD_ENDUNGEN = {".jpg", ".jpeg", ".png", ".webp"}
-MAX_KANTE = 1600
-QUALITAET = 85
-DATUM_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:[_-]+(.*))?$", re.DOTALL)
+STILLE_NAMEN = {"thumbs.db", "desktop.ini"}
 
 
-def warn(msg):
-    print(f"WARNUNG: {msg}", file=sys.stderr)
+def _annotation(text):
+    """Escaping für GitHub-Workflow-Befehle (::warning ...)."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def parse_name(stem):
-    """Gibt (datum oder None, titel) aus dem Dateinamen ohne Endung zurück."""
-    datum, rest = None, stem
-    m = DATUM_RE.match(stem)
-    if m:
-        try:
-            datetime.date.fromisoformat(m.group(1))
-            datum, rest = m.group(1), m.group(2) or ""
-        except ValueError:
-            pass
-    titel = " ".join(re.sub(r"[_-]", " ", rest).split())
-    return datum, titel or datum or stem
+class Bericht:
+    """Sammelt Warnungen: stderr, GitHub-Annotation und Zusammenfassung des Laufs."""
 
+    def __init__(self):
+        self.meldungen = []  # (art, datei, text); art: "uebersprungen" oder "hinweis"
 
-def lese_text(txt_pfad, titel):
-    """Liest die .txt: gibt (titel, text oder None) zurück."""
-    if not txt_pfad.is_file():
-        return titel, None
-    inhalt = txt_pfad.read_text(encoding="utf-8-sig", errors="replace")
-    zeilen = inhalt.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    if zeilen and zeilen[0].startswith("#"):
-        neuer_titel = zeilen[0].lstrip("#").strip()
-        if neuer_titel:
-            titel = neuer_titel
-        zeilen = zeilen[1:]
-    text = "\n".join(zeilen).strip()
-    return titel, text or None
+    def _melde(self, art, datei, text):
+        name = datei.name if isinstance(datei, Path) else datei
+        self.meldungen.append((art, name, text))
+        print(f"WARNUNG: {name + ': ' if name else ''}{text}", file=sys.stderr)
+        if os.environ.get("GITHUB_ACTIONS"):
+            pfad = ""
+            if isinstance(datei, Path):
+                try:
+                    pfad = datei.resolve().relative_to(Path.cwd().resolve()).as_posix()
+                except ValueError:
+                    pfad = datei.name
+            prop = f" file={_annotation(pfad).replace(':', '%3A').replace(',', '%2C')}" if pfad else ""
+            print(f"::warning{prop}::{_annotation(f'{name}: {text}' if name else text)}")
 
+    def uebersprungen(self, datei, text):
+        self._melde("uebersprungen", datei, text)
 
-def verkleinere(quelle, ziel):
-    """Dreht per EXIF, entfernt Metadaten, skaliert, speichert JPEG. Gibt (b, h) zurück."""
-    with Image.open(quelle) as img:
-        img.load()
-        img = ImageOps.exif_transpose(img)
-        if img.mode in ("RGBA", "LA", "P"):
-            img = img.convert("RGBA")
-            grund = Image.new("RGB", img.size, (255, 255, 255))
-            grund.paste(img, mask=img.getchannel("A"))
-            img = grund
+    def hinweis(self, datei, text):
+        self._melde("hinweis", datei, text)
+
+    def zusammenfassung(self, anzahl):
+        """Schreibt die kurze deutsche Zusammenfassung nach $GITHUB_STEP_SUMMARY (falls gesetzt)."""
+        ziel = os.environ.get("GITHUB_STEP_SUMMARY")
+        if not ziel:
+            return
+        skip = [m for m in self.meldungen if m[0] == "uebersprungen"]
+        hinweise = [m for m in self.meldungen if m[0] == "hinweis"]
+        wort = "Erinnerung" if anzahl == 1 else "Erinnerungen"
+        kopf = f"**{anzahl} {wort} online**"
+        if not self.meldungen:
+            zeilen = [f"{kopf} · nichts übersprungen."]
         else:
-            img = img.convert("RGB")
-        img.thumbnail((MAX_KANTE, MAX_KANTE), Image.LANCZOS)
-        # Neues Bild ohne info/exif: nichts von GPS u. Ä. wird übernommen.
-        sauber = Image.new("RGB", img.size)
-        sauber.paste(img)
-        sauber.save(ziel, "JPEG", quality=QUALITAET, optimize=True)
-        return sauber.size
+            zeilen = [f"{kopf} · übersprungen: {len(skip)} · Hinweise: {len(hinweise)}", ""]
+            zeilen += [f"- `{name}`: {text}" if name else f"- {text}" for _, name, text in self.meldungen]
+        try:
+            with open(ziel, "a", encoding="utf-8") as f:
+                f.write("## Museum aktualisiert\n\n" + "\n".join(zeilen) + "\n")
+        except OSError:
+            pass
 
 
 def sortier_schluessel(e):
-    return (e["datum"] is None, e["datum"] or "", e["bild"].lower())
+    return (e["datum"] is None, e["datum"] or "", e["bild"].split("?")[0].lower())
 
 
-def baue_erinnerungen(quelle, ziel_bilder):
+def klassifiere(pfad):
+    """'bild', 'txt', 'still' (bewusst ignoriert), 'ordner' oder 'fremd'."""
+    endung = pfad.suffix.lower()
+    if pfad.is_dir():
+        return "still" if pfad.name.startswith(".") else "ordner"
+    if endung in BILD_ENDUNGEN:
+        return "bild"
+    if endung == ".txt" and pfad.stem.lower() not in ("readme", "widmung"):
+        return "txt"
+    if (pfad.name.startswith(".") or endung in (".md", ".txt")
+            or pfad.name.lower() in STILLE_NAMEN):
+        return "still"
+    return "fremd"
+
+
+def _eintrag(pfad, ausgabe, ziel, txt):
+    """Verarbeitet ein Bild; gibt den JSON-Eintrag zurück (Fehler -> Exception)."""
+    breite, hoehe, exif_datum = verkleinere(pfad, ziel / ausgabe)
+    datum, titel = parse_name(pfad.stem)
+    titel, text = lese_text(txt, titel)
+    return {
+        "bild": f"erinnerungen/{ausgabe}?v={inhalts_hash(ziel / ausgabe)}", "titel": titel,
+        "datum": datum or exif_datum, "text": text, "breite": breite, "hoehe": hoehe,
+    }
+
+
+def baue_erinnerungen(quelle, ziel_bilder, bericht):
     eintraege, benutzt = [], set()
     if not quelle.is_dir():
-        warn(f"{quelle} existiert nicht, keine Erinnerungen.")
+        bericht.hinweis(None, f"{quelle} existiert nicht, keine Erinnerungen.")
         return eintraege
-    for pfad in sorted(quelle.iterdir(), key=lambda p: p.name.lower()):
-        if not pfad.is_file() or pfad.suffix.lower() not in BILD_ENDUNGEN:
+    dateien = sorted(quelle.iterdir(), key=lambda p: p.name.lower())
+    arten = {p: klassifiere(p) for p in dateien}
+    txts = {p.name.lower(): p for p in reversed(dateien) if arten[p] == "txt"}
+    verwendet = set()
+    for pfad in dateien:
+        if arten[pfad] == "ordner":
+            bericht.uebersprungen(pfad, "Unterordner werden nicht gelesen, Fotos bitte direkt in erinnerungen/ legen.")
+        elif arten[pfad] == "fremd":
+            bericht.uebersprungen(pfad, "Dateityp wird nicht unterstützt (nur Fotos: JPG, PNG, WebP, HEIC).")
+        if arten[pfad] != "bild":
             continue
+        txt = finde_txt(pfad, txts)
+        verwendet.add(txt)
         ausgabe = re.sub(r"[^\w.\-]", "_", pfad.stem) + ".jpg"
         if ausgabe.lower() in benutzt:
-            warn(f"{pfad.name}: Ausgabename {ausgabe} schon vergeben, übersprungen.")
+            bericht.uebersprungen(pfad, f"Ausgabename {ausgabe} schon vergeben, übersprungen.")
             continue
         ziel_bilder.mkdir(parents=True, exist_ok=True)
         try:
-            breite, hoehe = verkleinere(pfad, ziel_bilder / ausgabe)
+            eintraege.append(_eintrag(pfad, ausgabe, ziel_bilder, txt))
         except Exception as fehler:  # kaputte Datei darf den Build nicht stoppen
-            warn(f"{pfad.name}: kein lesbares Bild, übersprungen ({fehler}).")
+            bericht.uebersprungen(pfad, f"kein lesbares Bild, übersprungen ({fehler}).")
             (ziel_bilder / ausgabe).unlink(missing_ok=True)
             continue
         benutzt.add(ausgabe.lower())
-        datum, titel = parse_name(pfad.stem)
-        titel, text = lese_text(pfad.with_suffix(".txt"), titel)
-        eintraege.append({
-            "bild": f"erinnerungen/{ausgabe}", "titel": titel, "datum": datum,
-            "text": text, "breite": breite, "hoehe": hoehe,
-        })
+    for pfad in dateien:
+        if arten[pfad] == "txt" and pfad not in verwendet:
+            bericht.hinweis(pfad, "Textdatei gehört zu keinem Foto (Name muss zum Foto passen, "
+                                  "z. B. foto.txt oder foto.jpg.txt) und wird nicht benutzt.")
     return sorted(eintraege, key=sortier_schluessel)
 
 
 def baue(erinnerungen, site, ausgabe):
+    bericht = Bericht()
     if ausgabe.exists():
         shutil.rmtree(ausgabe)
     if site.is_dir():
         shutil.copytree(site, ausgabe)
     else:
-        warn(f"{site} existiert nicht, _site bleibt ohne Seite.")
+        bericht.hinweis(None, f"{site} existiert nicht, _site bleibt ohne Seite.")
         ausgabe.mkdir(parents=True)
-    eintraege = baue_erinnerungen(erinnerungen, ausgabe / "erinnerungen")
+    eintraege = baue_erinnerungen(erinnerungen, ausgabe / "erinnerungen", bericht)
+    daten = {"erinnerungen": eintraege}
+    widmung = lese_widmung(erinnerungen)
+    if widmung:
+        daten["widmung"] = widmung
     (ausgabe / "erinnerungen.json").write_text(
-        json.dumps({"erinnerungen": eintraege}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8")
+        json.dumps(daten, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    bericht.zusammenfassung(len(eintraege))
     return eintraege
 
 

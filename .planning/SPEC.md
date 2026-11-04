@@ -11,7 +11,7 @@ Ziel-URL der Seite: `https://andyholiday.github.io/youtube/`
 | C – Pipeline | `tools/`, `erinnerungen/`, `.github/`, `tests/build/`, `README.md` |
 
 ## Quelle: `erinnerungen/`
-- Bilder: `.jpg`, `.jpeg`, `.png`, `.webp` (Groß-/Kleinschreibung egal).
+- Bilder: `.jpg`, `.jpeg`, `.png`, `.webp`, `.heic`, `.heif` (Groß-/Kleinschreibung egal).
 - Dateiname optional mit Datum vorn: `2023-06-12_unser-erster-urlaub.jpg`.
   - `datum` = `2023-06-12`, `titel` = `unser erster urlaub` (`_` und `-` → Leerzeichen).
   - Ohne Datum: `datum` = null, `titel` aus dem ganzen Namen.
