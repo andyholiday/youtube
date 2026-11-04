@@ -1,4 +1,4 @@
-"""Prueft den 3D-Herz-QR (Varianten dunkel, hell und weiss): beide unabhaengigen Decoder (zxing-cpp, OpenCV) lesen die URL."""
+"""Prueft den weissen 3D-Herz-QR (herz-qr.png): beide unabhaengigen Decoder (zxing-cpp, OpenCV) lesen die URL."""
 from pathlib import Path
 
 import cv2
@@ -7,23 +7,22 @@ import pytest
 import zxingcpp
 from PIL import Image, ImageFilter
 
+import layout
 import make_qr
-from backdrop import PALETTES
 
 HIER = Path(__file__).parent
+PX = 32
 
 
 @pytest.fixture(scope="module")
 def frisch(tmp_path_factory):
-    """Alle Varianten einmal frisch erzeugt (die Szene wird nur einmal gerendert)."""
-    return make_qr.compose(make_qr.URL, tmp_path_factory.mktemp("qr"), 32)
+    """Das Bild einmal frisch erzeugt (die Szene wird nur einmal gerendert)."""
+    return make_qr.compose(make_qr.URL, tmp_path_factory.mktemp("qr"), PX)
 
 
-@pytest.fixture(params=[(v, q) for v in PALETTES for q in ("frisch erzeugt", "eingecheckt")],
-                ids=lambda p: f"{p[0]}-{p[1]}")
+@pytest.fixture(params=["frisch erzeugt", "eingecheckt"])
 def png(request, frisch):
-    variante, quelle = request.param
-    return frisch[variante] if quelle == "frisch erzeugt" else HIER / PALETTES[variante]["file"]
+    return frisch if request.param == "frisch erzeugt" else HIER / make_qr.DATEI
 
 
 def zxing(img):
@@ -40,6 +39,22 @@ def verkleinert(png, breite, blur=0.0):
     if blur:
         klein = klein.filter(ImageFilter.GaussianBlur(blur))
     return cv2.cvtColor(np.array(klein), cv2.COLOR_RGB2BGR)
+
+
+def qr_flaeche(png):
+    """Graubild-Ausschnitt der QR-Flaeche samt Ruhezone (Pixel) und ihre Lage."""
+    side = make_qr.qr_side(make_qr.URL)
+    plan = layout.plan(int(side))
+    left, top, _, _ = plan["view"]
+    cx0, cy0 = plan["card"]
+    x0, y0 = round((cx0 - left) * PX), round((top - (cy0 + side)) * PX)
+    grau = np.asarray(Image.open(png).convert("L"), np.float32)
+    n = int(side * PX)
+    return grau[y0:y0 + n, x0:x0 + n]
+
+
+def test_nur_eine_ausgabedatei():
+    assert sorted(p.name for p in HIER.glob("herz-qr*.png")) == [make_qr.DATEI]
 
 
 def test_png_ist_druckfaehig_breit(png):
@@ -65,21 +80,26 @@ def test_400px_weichgezeichnet_lesbar(png):
     assert zxing(arr) == [make_qr.URL] or opencv(arr) == make_qr.URL
 
 
-def test_karte_hell_und_module_dunkel(png):
-    """Karte heller als 200, Module dunkler als 80 (Kontrast), Ruhezone ohne Glanzpunkte."""
-    grau = np.asarray(Image.open(png).convert("L"), np.float32)
-    h, w = grau.shape
-    karte = grau[int(h * 0.30):int(h * 0.66), int(w * 0.30):int(w * 0.70)]
-    assert np.percentile(karte, 98) > 200 and np.percentile(karte, 2) < 80
+def test_qr_ist_nicht_kleiner_als_bisher():
+    """Der Code (samt Ruhezone) fuellt mindestens 44 % der Bildbreite, die Ruhezone mindestens 3 Module."""
+    assert make_qr.qr_side(make_qr.URL) / layout.WIDTH >= 0.44
+    assert make_qr.QUIET >= 3
 
 
-def test_weiss_plateau_gleichmaessig_hell_ohne_glanzpunkte():
-    """Weisse Variante: Das Plateau (helle Pixel im QR-Bereich) hat gleichmaessiges Licht, keine Glanzlichter."""
-    grau = np.asarray(Image.open(HIER / PALETTES["weiss"]["file"]).convert("L"), np.float32)
-    h, w = grau.shape
-    flaeche = grau[int(h * 0.30):int(h * 0.66), int(w * 0.30):int(w * 0.70)]
+def test_kontrast_module_dunkel_flaeche_hell(png):
+    flaeche = qr_flaeche(png)
+    assert np.percentile(flaeche, 98) > 200 and np.percentile(flaeche, 2) < 80
+
+
+def test_ruhezone_und_plateau_gleichmaessig_hell_ohne_glanzpunkte():
+    """Die helle Flaeche um die Module (inkl. Ruhezone) hat gleichmaessiges Licht, keine Glanzlichter, keinen Verlauf."""
+    flaeche = qr_flaeche(HIER / make_qr.DATEI)
     dunkel = cv2.dilate((flaeche < 150).astype(np.uint8), np.ones((15, 15), np.uint8)) > 0   # Modulkanten ausnehmen
     hell = flaeche[~dunkel]
     assert hell.size > 10000
     assert np.percentile(hell, 1) > 220 and np.percentile(hell, 99) < 250
     assert np.percentile(hell, 99) - np.percentile(hell, 1) < 15
+    rand = int(make_qr.QUIET * PX)
+    ring = np.ones(flaeche.shape, bool)
+    ring[rand:-rand, rand:-rand] = False
+    assert np.percentile(flaeche[ring], 1) > 220 and np.ptp(np.percentile(flaeche[ring], [1, 99])) < 15
