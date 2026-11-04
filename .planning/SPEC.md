@@ -40,3 +40,5 @@ Ziel-URL der Seite: `https://andyholiday.github.io/youtube/`
 - Sortierung: mit Datum aufsteigend zuerst, danach ohne Datum nach Dateiname.
 - `bild` ist relativ zu `index.html`.
 - Leere Liste ist gültig.
+- `titel` darf `""` sein (generischer Kamera-Dateiname wie `IMG_1234`); die Seite zeigt dann nur das Datum.
+- `bild` darf einen Cache-Parameter tragen (`…jpg?v=<hash>`).
