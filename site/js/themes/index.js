@@ -4,9 +4,11 @@ import { build as modern } from './modern.js';
 import { build as klassisch } from './klassisch.js';
 import { build as futuristisch } from './futuristisch.js';
 import { build as garten } from './garten.js';
+import { build as geheim } from './geheim.js';
 
+// THEMES ist die Rotation der normalen Räume; 'geheim' (Easter Egg) setzt nur layout.js für den geheimen Raum.
 export const THEMES = ['modern', 'klassisch', 'futuristisch', 'garten'];
-const BUILDERS = { modern, klassisch, futuristisch, garten };
+const BUILDERS = { modern, klassisch, futuristisch, garten, geheim };
 
 export function buildTheme(name, room) {
   const build = BUILDERS[name];

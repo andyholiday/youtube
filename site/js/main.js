@@ -5,6 +5,7 @@ import { createPictures } from './pictures.js';
 import { createInput } from './input.js';
 import { stepPlayer, createWalkable, EYE } from './player.js';
 import { createUi, isTouchDevice } from './ui.js';
+import { createContext } from './context.js';
 
 const LAZY_INTERVAL = 0.3;
 const FOCUS_INTERVAL = 0.2; // Blick-Fokus höchstens ~5× pro Sekunde prüfen
@@ -16,6 +17,7 @@ const MSG_LOAD = 'Die Erinnerungen konnten nicht geladen werden – bitte Seite 
 const MSG_START = 'Das Museum konnte nicht gestartet werden – bitte Seite neu laden.';
 
 let ui = null;
+let api = null; // Feature-Schnittstelle (context.js)
 
 /** erinnerungen.json laden. Netz-, HTTP- und JSON-Fehler werfen; eine leere Liste ist ein gültiges Ergebnis. */
 async function loadData() {
@@ -24,6 +26,7 @@ async function loadData() {
   const data = await res.json();
   if (!data || !Array.isArray(data.erinnerungen)) throw new Error('erinnerungen.json hat kein Feld "erinnerungen"');
   return {
+    data,
     items: data.erinnerungen.filter((e) => e && typeof e.bild === 'string'),
     widmung: data.widmung ?? null,
   };
@@ -124,6 +127,13 @@ function trackInput(seen, mv, turn, look) {
   if (!seen.look && (turn || look.yaw || look.pitch)) { seen.look = true; ui.markInteracted('look'); }
 }
 
+const isActive = (state) => state.entered && !state.uiOpen && !state.paused;
+
+function announceRoom(room) {
+  ui.roomEntered(room);
+  api.roomEntered(room);
+}
+
 function runLoop(world, player, walk, input, state) {
   const { renderer, scene, camera, pictures, rooms } = world;
   const focus = createFocus(world, ui);
@@ -131,9 +141,9 @@ function runLoop(world, player, walk, input, state) {
   let last = performance.now();
   let lazyClock = LAZY_INTERVAL;
   renderer.setAnimationLoop((now) => {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); // der erste rAF-Zeitstempel kann vor `last` liegen
     last = now;
-    const active = state.entered && !state.uiOpen;
+    const active = isActive(state);
     const mv = active ? input.move() : { x: 0, y: 0 };
     const turn = active ? input.turn() : 0;
     const look = input.takeLook();
@@ -142,14 +152,16 @@ function runLoop(world, player, walk, input, state) {
     const room = walk.roomAt(player.x, player.z);
     if (room >= 0 && room !== player.room) {
       player.room = room; // im Türspalt bleibt der letzte Raum
-      if (state.entered) ui.roomEntered(rooms[room]);
+      if (state.entered) announceRoom(rooms[room]);
     }
     camera.position.set(player.x, EYE, player.z);
     camera.rotation.set(player.pitch, player.yaw, 0);
+    camera.updateMatrixWorld(); // der Blick-Fokus misst von der Ich-Pose, auch wenn die Paar-Ansicht die Kamera danach versetzt
     lazyClock += dt;
     if (lazyClock >= LAZY_INTERVAL) { lazyClock = 0; pictures.updateLazy(player.room); }
     pictures.update(dt);
     focus.update(dt, player.room, active);
+    api.frame(dt);
     renderer.render(scene, camera);
   });
 }
@@ -162,36 +174,30 @@ function enterMuseum(state) {
   ui.showControlsHint(document.body.classList.contains('touch')
     ? 'Daumen links unten aufsetzen und schieben zum Laufen\nRechts wischen zum Umschauen\nBild antippen'
     : 'W A S D oder Pfeiltasten zum Laufen · Maus ziehen zum Umschauen · Bild anklicken');
-  if (state.rooms) ui.roomEntered(state.rooms[state.player.room]);
+  if (state.rooms) announceRoom(state.rooms[state.player.room]);
 }
 
-function setupInput(world, state, player) {
-  const raycaster = new THREE.Raycaster();
-  raycaster.far = 40;
+function setupInput(world, state) {
   return createInput({
     canvas: world.renderer.domElement,
     joyEl: document.getElementById('joystick'),
     joyKnob: document.querySelector('#joystick .knauf'),
-    isActive: () => state.entered && !state.uiOpen,
+    isActive: () => isActive(state),
     onTouchSeen: () => document.body.classList.add('touch'),
-    onTap: (x, y) => {
-      raycaster.setFromCamera(new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1), world.camera);
-      // Das nächste getroffene Objekt zählt: Wände und Deko verdecken Bilder dahinter.
-      const { hits, groups } = nearRooms(world, player.room, NEAR_ROOMS);
-      const hit = raycaster.intersectObjects([...hits, ...groups], true)[0];
-      if (hit && hit.object.userData.index !== undefined) ui.openLightbox(hit.object.userData.index);
-    },
+    onTap: (x, y) => api.tap(x, y),
+    onLongPress: (x, y) => api.longPress(x, y),
   });
 }
 
 async function start() {
   document.body.classList.toggle('touch', isTouchDevice());
-  const state = { entered: false, uiOpen: false, rooms: null, player: null };
+  const state = { entered: false, uiOpen: false, paused: false, rooms: null, player: null };
   let input = null;
-  ui = hooked(createUi({
+  const rawUi = createUi({
     onEnter: () => enterMuseum(state),
     onLightbox: (open) => { state.uiOpen = open; if (input) input.reset(); },
-  }));
+  });
+  ui = hooked(rawUi);
   ui.setLoading('Bilder werden aufgehängt …');
 
   const renderer = createRenderer(document.getElementById('szene'));
@@ -214,13 +220,26 @@ async function start() {
   const walk = createWalkable(rooms, world.themes.map((t) => t.obstacles || []));
   const player = { ...startPose(rooms[0], walk.canStand, EYE), room: 0 };
   Object.assign(state, { rooms, player });
-  input = setupInput(world, state, player);
+  api = createContext({
+    THREE, world, data: data.data, items, rooms, player, ui: rawUi, state,
+    openLightbox: (i) => ui.openLightbox(i),
+    resetInput: () => input && input.reset(),
+    near: (roomId) => nearRooms(world, roomId, NEAR_ROOMS),
+  });
+  input = setupInput(world, state);
   handleResize(renderer, world.camera);
   exposeTestHook({ player, world, items, rooms, walk });
+  await api.loadFeatures();
   await world.pictures.preload(0, PRELOAD_MS);
   ui.setReady();
   runLoop(world, player, walk, input, state);
 }
+
+/** Bildschirmposition eines Weltpunkts mit der echten Kamera (Test-Hook). */
+const screenOf = (camera, v) => {
+  v.project(camera);
+  return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight, visible: v.z < 1 && Math.abs(v.x) < 1 && Math.abs(v.y) < 1 };
+};
 
 /** Schmale Schnittstelle für automatische Tests. */
 function exposeTestHook({ player, world, items, rooms, walk }) {
@@ -252,11 +271,17 @@ function exposeTestHook({ player, world, items, rooms, walk }) {
     themeGroup: (r) => themes[r].group, // Tests hängen hier Blocker auf
     pixelRatio: () => renderer.getPixelRatio(),
     fov: () => camera.fov,
+    cameraPosition: () => camera.position.toArray(), // tatsächliche Kamera (auch Paar-Ansicht)
     ceilingY: (room) => new THREE.Box3().setFromObject(themes[room].group).max.y,
     loadedIn: (room) => pictures.entries.filter((e) => e.room === room && e.state === 2).length,
-    screenPositionOf(i) {
-      const v = pictures.entries[i].pic.getWorldPosition(new THREE.Vector3()).project(camera);
-      return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight, visible: v.z < 1 && Math.abs(v.x) < 1 && Math.abs(v.y) < 1 };
+    screenPositionOf: (i) => screenOf(camera, pictures.entries[i].pic.getWorldPosition(new THREE.Vector3())),
+    screenPositionAt: (x, y, z) => screenOf(camera, new THREE.Vector3(x, y, z)),
+    figureRect() { // Bildschirmrechteck um die Paar-Figuren oder null (Test-Hook)
+      const figures = world.scene.getObjectByName('paar-figuren');
+      if (!figures || !figures.visible) return null;
+      const box = new THREE.Box3().setFromObject(figures);
+      const pts = [0, 1].flatMap((i) => [0, 1].flatMap((j) => [0, 1].map((k) => screenOf(camera, new THREE.Vector3(i ? box.max.x : box.min.x, j ? box.max.y : box.min.y, k ? box.max.z : box.min.z)))));
+      return { x0: Math.min(...pts.map((q) => q.x)), x1: Math.max(...pts.map((q) => q.x)), y0: Math.min(...pts.map((q) => q.y)), y1: Math.max(...pts.map((q) => q.y)) };
     },
   };
 }

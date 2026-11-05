@@ -131,8 +131,8 @@ async function suiteLayout() {
   });
   await plain('Alle Räume sind vom Start über Türen erreichbar', async () => {
     for (const [n, rooms] of Object.entries(layouts)) assert.deepStrictEqual(C.reachable(rooms), [], `n=${n}`);
-    assert.strictEqual(layouts[13].length, 4, '13 Bilder -> 4 Räume');
-    assert.ok(layouts[7].length >= 3, '7 Bilder -> mind. 3 Räume');
+    assert.strictEqual(C.normal(layouts[13]).length, 4, '13 Bilder -> 4 Räume (ohne geheimen Raum)');
+    assert.ok(C.normal(layouts[7]).length >= 3, '7 Bilder -> mind. 3 Räume');
   });
   await plain('Rundgang hat Ecken (Richtungswechsel), Türen auf wechselnden Wänden', async () => {
     for (const n of [7, 13, 25]) assert.deepStrictEqual(C.hasCorner(layouts[n]), [], `n=${n}`);
@@ -148,17 +148,21 @@ async function suiteLayout() {
     const sizes = layouts[7].flatMap((r) => r.slots.map((s) => C.longEdge(s)));
     assert.ok(C.distinctSizes(layouts[7]) >= 3, `nur ${C.distinctSizes(layouts[7])} Größen`);
     assert.ok(Math.max(...sizes) >= 3.2 && Math.min(...sizes) <= 1.7, sizes.join(','));
-    for (const r of layouts[7]) assert.ok(r.slots.some((s) => C.longEdge(s) >= 3.0), `Raum ${r.id} ohne Blickfang`);
+    for (const r of C.normal(layouts[7])) assert.ok(r.slots.some((s) => C.longEdge(s) >= 3.0), `Raum ${r.id} ohne Blickfang`);
   });
-  await plain('Leere Liste: ein Raum, keine Tür, kein Bild', async () => {
-    assert.strictEqual(layouts[0].length, 1);
-    assert.deepStrictEqual([layouts[0][0].doors.length, layouts[0][0].slots.length], [0, 0]);
+  await plain('Leere Liste: ein Raum, keine Tür (außer der geheimen), kein Bild', async () => {
+    assert.strictEqual(C.normal(layouts[0]).length, 1);
+    assert.deepStrictEqual([layouts[0][0].doors.filter((d) => !d.secret).length, layouts[0][0].slots.length], [0, 0]);
+  });
+  await plain('Geheimer Raum: immer genau einer, 6 × 6 m, am letzten Raum, ohne Bilder (0–40 Bilder)', async () => {
+    for (const [n, rooms] of Object.entries(layouts)) assert.deepStrictEqual(C.secretRoom(rooms), [], `n=${n}`);
   });
   await test('App nutzt das Layout: 3 Räume, Themen der Reihe nach, Decke gebaut ≥ 7 m', D7, false, async (page) => {
-    const rooms = await getRooms(page);
+    const all = await getRooms(page);
+    const rooms = C.normal(all);
     assert.strictEqual(rooms.length, 3);
     assert.deepStrictEqual(rooms.map((r) => r.theme), ['modern', 'klassisch', 'futuristisch']);
-    assert.deepStrictEqual(C.checkAll(rooms, 7), []);
+    assert.deepStrictEqual(C.checkAll(all, 7), []);
     for (const r of rooms) assert.ok(await page.evaluate((i) => window.__museum.ceilingY(i), r.id) >= 7, `Raum ${r.id} Decke zu niedrig`);
   });
 }
@@ -177,7 +181,7 @@ async function suiteWorld() {
   });
   await test('Leere Liste: Hinweis im leeren Saal, keine Fehler', 'data-0.json', false, async (page) => {
     await L.enter(page);
-    assert.strictEqual((await getRooms(page)).length, 1);
+    assert.strictEqual(C.normal(await getRooms(page)).length, 1);
     const hint = page.locator('#leer-hinweis');
     await hint.waitFor({ state: 'visible' });
     assert.match(await hint.innerText(), /Noch hängt hier nichts/);

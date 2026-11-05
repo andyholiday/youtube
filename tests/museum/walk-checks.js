@@ -70,14 +70,15 @@ function reachAllRooms(page, count) {
     const findPath = new Function(`return ${findSrc}`)();
     const goTo = new Function(`return ${goSrc}`)();
     const items = Array.from({ length: n }, (_, i) => ({ breite: 1600 - (i % 3) * 300, hoehe: 1000 }));
-    const rooms = buildLayout(items, THEMES);
-    const walk = createWalkable(rooms, rooms.map((r) => buildTheme(r.theme, r).obstacles));
+    const all = buildLayout(items, THEMES);
+    const walk = createWalkable(all, all.map((r) => buildTheme(r.theme, r).obstacles));
+    const rooms = all.filter((r) => !r.secret); // der geheime Raum gehört nicht zum Rundgang (siehe tests/museum/features/eggs)
     const first = startCandidates(rooms[0]).find((c) => walk.canStand(c.x, c.z));
     const p = { x: first.x, z: first.z, yaw: 0, pitch: 0 };
     const seen = [];
     for (let i = 0; i < rooms.length - 1; i++) {
       const r = rooms[i];
-      const d = r.doors.find((q) => q.to === i + 1);
+      const d = r.doors.find((q) => q.to === i + 1 && !q.secret);
       const into = 1.5 + GAP;
       const target = { e: [r.x1 + into, d.center], w: [r.x0 - into, d.center], s: [d.center, r.z1 + into], n: [d.center, r.z0 - into] }[d.wall];
       const path = findPath(walk, p, target, step);

@@ -1,4 +1,5 @@
 import { formatDatum, nameUndDatum } from './format.js';
+import { createExtras } from './ui-extras.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -279,10 +280,11 @@ export function createUi({ onEnter, onLightbox }) {
     isLightboxOpen: () => lightbox.isOpen,
     getText: () => widmung && widmung.text,
   });
+  const extras = createExtras();
   const lightbox = createLightbox({
     getItems: () => items,
     onToggle: onLightbox,
-    onShown: (i) => { discovery.add(i); flow.check(0); },
+    onShown: (i) => { extras.lightboxShown(i); discovery.add(i); flow.check(0); },
     onClosed: flow.lightboxClosed,
   });
   const caption = createCaption((i) => lightbox.open(i));
@@ -306,5 +308,12 @@ export function createUi({ onEnter, onLightbox }) {
       flow.check(FINALE_DELAY_MS);
     },
     openLightbox: lightbox.open,
+    // Erweiterungspunkte für Feature-Module (siehe ui-extras.js)
+    overlayRoot: extras.overlayRoot,
+    hud: extras.hud,
+    addStyle: extras.addStyle,
+    toast: extras.toast,
+    onStartHeartTap: extras.onStartHeartTap,
+    onLightboxOpen: extras.onLightboxOpen,
   };
 }
