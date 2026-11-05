@@ -103,7 +103,8 @@ def test_andere_dateien_ignoriert(dirs):
 
 def test_leeres_verzeichnis(dirs):
     assert lauf(dirs) == []
-    assert json.loads((dirs[2] / "erinnerungen.json").read_text()) == {"erinnerungen": []}
+    assert json.loads((dirs[2] / "erinnerungen.json").read_text()) == {
+        "erinnerungen": [], "geheim": {"herzregen": "", "raumtext": "", "tage": [], "raum": []}}
 
 
 def test_fehlendes_erinnerungen_verzeichnis(dirs):
@@ -133,7 +134,7 @@ def test_schluessel_und_cli(dirs):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     e = json.loads((dirs[2] / "erinnerungen.json").read_text())["erinnerungen"][0]
-    assert set(e) == {"bild", "titel", "datum", "text", "breite", "hoehe"}
+    assert set(e) == {"bild", "titel", "datum", "text", "notiz", "breite", "hoehe", "quelle"}
     assert ausgabe_pfad(dirs, e).is_file()
 
 

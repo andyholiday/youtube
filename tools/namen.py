@@ -60,19 +60,36 @@ def dekodiere(daten):
         return daten.decode("cp1252", errors="replace")
 
 
-def lese_text(txt_pfad, titel):
-    """Liest die .txt (Pfad oder None): gibt (titel, text oder None) zurück."""
+NOTIZ_RE = re.compile(r"##\s*notiz\s*:?", re.IGNORECASE)
+
+
+def lese_text_und_notiz(txt_pfad, titel):
+    """Liest die .txt (Pfad oder None): gibt (titel, text oder None, notiz oder None) zurück.
+
+    Die Notiz ist alles nach einer Zeile `## Notiz`; sie gehört nicht zum Text.
+    """
     if txt_pfad is None or not txt_pfad.is_file():
-        return titel, None
+        return titel, None, None
     inhalt = dekodiere(txt_pfad.read_bytes()).lstrip("﻿")
     zeilen = inhalt.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    if zeilen and zeilen[0].startswith("#"):
+    if zeilen and zeilen[0].startswith("#") and not NOTIZ_RE.fullmatch(zeilen[0].strip()):
         neuer_titel = zeilen[0].lstrip("#").strip()
         if neuer_titel:
             titel = neuer_titel
         zeilen = zeilen[1:]
+    notiz = None
+    for i, zeile in enumerate(zeilen):
+        if NOTIZ_RE.fullmatch(zeile.strip()):
+            notiz = "\n".join(zeilen[i + 1:]).strip() or None
+            zeilen = zeilen[:i]
+            break
     text = "\n".join(zeilen).strip()
-    return titel, text or None
+    return titel, text or None, notiz
+
+
+def lese_text(txt_pfad, titel):
+    """Wie lese_text_und_notiz, aber nur (titel, text)."""
+    return lese_text_und_notiz(txt_pfad, titel)[:2]
 
 
 def finde_txt(bild_pfad, txts):

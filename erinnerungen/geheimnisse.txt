@@ -1,0 +1,7 @@
+# Herzregen
+Vorlage: Ich liebe dich.
+# Geheimer Raum
+Vorlage: Schön, dass du ihn gefunden hast.
+# Besondere Tage
+14.02. Vorlage: Alles Liebe zum Valentinstag!
+06.07.2019 Vorlage: Heute vor {jahre} Jahren saßen wir zum ersten Mal am Wasser.

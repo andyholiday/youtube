@@ -9,9 +9,11 @@ import sys
 from pathlib import Path
 
 from bilder import BILD_ENDUNGEN, MAX_KANTE, inhalts_hash, verkleinere  # noqa: F401
-from namen import finde_txt, lese_text, lese_widmung, parse_name  # noqa: F401
+from geheim import lese_geheimnisse
+from namen import finde_txt, lese_text, lese_text_und_notiz, lese_widmung, parse_name  # noqa: F401
 
 STILLE_NAMEN = {"thumbs.db", "desktop.ini"}
+GEHEIM_ORDNER = "geheim"
 
 
 def _annotation(text):
@@ -77,7 +79,7 @@ def klassifiere(pfad):
         return "still" if pfad.name.startswith(".") else "ordner"
     if endung in BILD_ENDUNGEN:
         return "bild"
-    if endung == ".txt" and pfad.stem.lower() not in ("readme", "widmung"):
+    if endung == ".txt" and pfad.stem.lower() not in ("readme", "widmung", "geheimnisse"):
         return "txt"
     if (pfad.name.startswith(".") or endung in (".md", ".txt")
             or pfad.name.lower() in STILLE_NAMEN):
@@ -85,18 +87,27 @@ def klassifiere(pfad):
     return "fremd"
 
 
-def _eintrag(pfad, ausgabe, ziel, txt):
+def _eintrag(pfad, ausgabe, ziel, txt, praefix):
     """Verarbeitet ein Bild; gibt den JSON-Eintrag zurück (Fehler -> Exception)."""
     breite, hoehe, exif_datum = verkleinere(pfad, ziel / ausgabe)
     datum, titel = parse_name(pfad.stem)
-    titel, text = lese_text(txt, titel)
+    titel, text, notiz = lese_text_und_notiz(txt, titel)
     return {
-        "bild": f"erinnerungen/{ausgabe}?v={inhalts_hash(ziel / ausgabe)}", "titel": titel,
-        "datum": datum or exif_datum, "text": text, "breite": breite, "hoehe": hoehe,
+        "bild": f"{praefix}/{ausgabe}?v={inhalts_hash(ziel / ausgabe)}", "titel": titel,
+        "datum": datum or exif_datum, "text": text, "notiz": notiz, "breite": breite, "hoehe": hoehe,
+        "quelle": f"{praefix}/{pfad.name}",
     }
 
 
-def baue_erinnerungen(quelle, ziel_bilder, bericht):
+def _unterordner_warnung(pfad, bericht, ist_hauptordner):
+    if ist_hauptordner and pfad.name.lower() == GEHEIM_ORDNER:
+        return  # erinnerungen/geheim/ ist gewollt und wird separat gebaut
+    bericht.uebersprungen(pfad, "Unterordner werden nicht gelesen, Fotos bitte direkt in erinnerungen/ legen"
+                                " (Ausnahme: der Ordner geheim für den geheimen Raum).")
+
+
+def baue_erinnerungen(quelle, ziel_bilder, bericht, praefix="erinnerungen"):
+    """Baut alle Bilder aus `quelle` nach `ziel_bilder`; `praefix` steht im JSON vor dem Dateinamen."""
     eintraege, benutzt = [], set()
     if not quelle.is_dir():
         bericht.hinweis(None, f"{quelle} existiert nicht, keine Erinnerungen.")
@@ -107,7 +118,7 @@ def baue_erinnerungen(quelle, ziel_bilder, bericht):
     verwendet = set()
     for pfad in dateien:
         if arten[pfad] == "ordner":
-            bericht.uebersprungen(pfad, "Unterordner werden nicht gelesen, Fotos bitte direkt in erinnerungen/ legen.")
+            _unterordner_warnung(pfad, bericht, praefix == "erinnerungen")
         elif arten[pfad] == "fremd":
             bericht.uebersprungen(pfad, "Dateityp wird nicht unterstützt (nur Fotos: JPG, PNG, WebP, HEIC).")
         if arten[pfad] != "bild":
@@ -120,7 +131,7 @@ def baue_erinnerungen(quelle, ziel_bilder, bericht):
             continue
         ziel_bilder.mkdir(parents=True, exist_ok=True)
         try:
-            eintraege.append(_eintrag(pfad, ausgabe, ziel_bilder, txt))
+            eintraege.append(_eintrag(pfad, ausgabe, ziel_bilder, txt, praefix))
         except Exception as fehler:  # kaputte Datei darf den Build nicht stoppen
             bericht.uebersprungen(pfad, f"kein lesbares Bild, übersprungen ({fehler}).")
             (ziel_bilder / ausgabe).unlink(missing_ok=True)
@@ -131,6 +142,17 @@ def baue_erinnerungen(quelle, ziel_bilder, bericht):
             bericht.hinweis(pfad, "Textdatei gehört zu keinem Foto (Name muss zum Foto passen, "
                                   "z. B. foto.txt oder foto.jpg.txt) und wird nicht benutzt.")
     return sorted(eintraege, key=sortier_schluessel)
+
+
+def baue_geheim(erinnerungen, ziel_bilder, bericht):
+    """Liest geheimnisse.txt und baut erinnerungen/geheim/; gibt immer ein vollständiges geheim-Objekt zurück."""
+    geheim = lese_geheimnisse(erinnerungen, bericht)
+    ordner = next((p for p in sorted(erinnerungen.iterdir()) if p.is_dir()
+                   and p.name.lower() == GEHEIM_ORDNER), None) if erinnerungen.is_dir() else None
+    if ordner:
+        geheim["raum"] = baue_erinnerungen(ordner, ziel_bilder / GEHEIM_ORDNER, bericht,
+                                           f"erinnerungen/{GEHEIM_ORDNER}")
+    return geheim
 
 
 def baue(erinnerungen, site, ausgabe):
@@ -147,6 +169,7 @@ def baue(erinnerungen, site, ausgabe):
     widmung = lese_widmung(erinnerungen)
     if widmung:
         daten["widmung"] = widmung
+    daten["geheim"] = baue_geheim(erinnerungen, ausgabe / "erinnerungen", bericht)
     (ausgabe / "erinnerungen.json").write_text(
         json.dumps(daten, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     bericht.zusammenfassung(len(eintraege))

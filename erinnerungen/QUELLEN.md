@@ -17,3 +17,4 @@ Die Bilder in diesem Ordner sind Testfotos von [Picsum Photos](https://picsum.ph
 | 2025-02-22_ein-stuendchen-im-cafe.jpg | 192 | Adam Przewoski | Unsplash License |
 | auf-reisen.jpg | 204 | Tiago Gerken | Unsplash License |
 | weg-zum-strand.jpg | 199 | Beto Galetto | Unsplash License |
+| geheim/2021-08-14_zu-zweit-auf-dem-wasser.jpg (Vorlage für den geheimen Raum) | 1083 | Sweet Ice Cream Photography | Unsplash License |

@@ -1,1 +1,4 @@
 # Weg zum Strand
+
+## Notiz
+Vorlage: Nur ein Titel, dazu eine versteckte Notiz.

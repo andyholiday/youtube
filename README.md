@@ -60,6 +60,54 @@ ist keine Erinnerung. Der Titel erscheint auf dem Startbildschirm, der Text auf 
 Abschlusskarte, nachdem alle Bilder entdeckt sind. Aktuell steht dort ein
 Platzhalter zum Überschreiben.
 
+### Notizen hinter Bildern
+
+Zu jedem Foto kann es eine versteckte Notiz geben. Sie steht in derselben `.txt`
+wie Titel und Text, nach einer Zeile `## Notiz`:
+
+```
+# Unser erster Abend am Wasser
+Der Text, der immer zu sehen ist.
+
+## Notiz
+Das hier erscheint nur, wenn man das Bild lange drückt.
+```
+
+Alles unter `## Notiz` gehört zur Notiz und nicht zum normalen Text.
+
+### Geheimnisse (Herzregen, geheimer Raum, besondere Tage)
+
+Alles optional. Die Datei `erinnerungen/geheimnisse.txt` hat drei Abschnitte, jeder
+beginnt mit einer Zeile `# Überschrift`. Die Datei im Ordner ist eine Vorlage zum
+Überschreiben:
+
+```
+# Herzregen
+Ich liebe dich.
+# Geheimer Raum
+Schön, dass du ihn gefunden hast.
+# Besondere Tage
+14.02. Alles Liebe zum Valentinstag!
+06.07.2019 Heute vor {jahre} Jahren saßen wir zum ersten Mal am Wasser.
+```
+
+- **Herzregen:** dieser Text fällt als Herzregen auf den Bildschirm.
+- **Geheimer Raum:** Begrüßungstext des Raums. Die Fotos dafür kommen (mit
+  optionaler `.txt` wie sonst auch) in den Ordner `erinnerungen/geheim/`. Ein
+  Beispielfoto liegt schon dort.
+- **Besondere Tage:** eine Zeile pro Tag, `TT.MM.` oder mit Jahr `TT.MM.JJJJ`,
+  dahinter der Text. Am Tag selbst erscheint er. `{jahre}` wird zur Zahl der
+  vergangenen Jahre (nur sinnvoll mit Jahr).
+
+Eine Zeile, die nicht passt (z. B. ein unmögliches Datum), wird übersprungen. Das
+steht dann in der Zusammenfassung des Laufs unter **Actions**, die Seite wird trotzdem
+gebaut. Andere Unterordner in `erinnerungen/` werden ignoriert und gemeldet.
+
+### Verwaltung direkt in der App
+
+*Platzhalter:* Fotos, Titel, Texte und Geheimnisse lassen sich später auch
+direkt in der App verwalten, ohne GitHub. Die Anleitung dazu wird nachgereicht.
+
 ### Wichtig
 
 - **Das Repo ist öffentlich.** Alle Dateien, auch die hochgeladenen Originale
