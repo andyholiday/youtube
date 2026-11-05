@@ -28,3 +28,11 @@ Ecken gehen, unterschiedliche Räume mit unterschiedlichen Themen (z. B. futuris
 klassisch).“ Danach wieder ein Testlink.
 5. Mehrere Räume mit je eigenem Thema, verbunden durch Durchgänge, Weg mit Ecken.
 6. Deutlich heller, Decken ≥ 7 m, Bilder in mindestens drei Größen.
+
+## Nachtrag 2026-11-05 (v4)
+Andre: „Easter Eggs, eine Third-Person-Ansicht zum Umstellen und eine Möglichkeit, in der App
+direkt die Bilder zu tauschen, ohne dass es für den User ersichtlich ist.“ Entschieden:
+7. Versteckter Verwaltungsmodus (5× Herz auf dem Start antippen): Fotos ersetzen, hinzufügen,
+   löschen, Titel/Text/Notiz bearbeiten, Widmung und Geheimnisse bearbeiten – direkt vom Handy.
+8. Easter Eggs: Herzregen, geheimer Raum, besondere Tage, versteckte Notizen (lang drücken).
+9. Third-Person-Ansicht per Knopf: zwei stilisierte Figuren Hand in Hand.

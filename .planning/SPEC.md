@@ -43,3 +43,29 @@ Ziel-URL der Seite: `https://andyholiday.github.io/youtube/`
 - Leere Liste ist gültig.
 - `titel` darf `""` sein (generischer Kamera-Dateiname wie `IMG_1234`); die Seite zeigt dann nur das Datum.
 - `bild` darf einen Cache-Parameter tragen (`…jpg?v=<hash>`).
+
+## Erweiterungen v4 (verbindlich)
+- Jede Erinnerung hat zusätzlich `"quelle": "erinnerungen/<Originaldateiname>"` (für den Verwaltungsmodus)
+  und `"notiz": "…" | null` (aus der `.txt`: alles nach einer Zeile `## Notiz`, nicht Teil von `text`).
+- Optional `erinnerungen/geheimnisse.txt` (Abschnitte mit `# Überschrift`):
+  ```
+  # Herzregen
+  Ich liebe dich.
+  # Geheimer Raum
+  Schön, dass du ihn gefunden hast.
+  # Besondere Tage
+  14.02. Alles Liebe zum Valentinstag!
+  06.07.2019 Heute vor {jahre} Jahren saßen wir zum ersten Mal am Wasser.
+  ```
+- Optional Ordner `erinnerungen/geheim/` mit Bildern (+ `.txt`) für den geheimen Raum, verarbeitet wie
+  normale Erinnerungen, Ausgabe unter `erinnerungen/geheim/…`.
+- JSON oberste Ebene `"geheim"` (immer vorhanden, Felder ggf. leer):
+  ```json
+  "geheim": {
+    "herzregen": "Ich liebe dich." ,
+    "raumtext": "Schön, dass du ihn gefunden hast.",
+    "tage": [{ "tag": "02-14", "jahr": null, "text": "…" }, { "tag": "07-06", "jahr": 2019, "text": "Heute vor {jahre} Jahren …" }],
+    "raum": [ /* Einträge wie in "erinnerungen", inkl. quelle/notiz */ ]
+  }
+  ```
+  `{jahre}` ersetzt die Seite. Fehlende Datei/Abschnitte → `""` bzw. `[]`.
