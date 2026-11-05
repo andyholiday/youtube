@@ -103,10 +103,57 @@ Eine Zeile, die nicht passt (z. B. ein unmögliches Datum), wird übersprungen. 
 steht dann in der Zusammenfassung des Laufs unter **Actions**, die Seite wird trotzdem
 gebaut. Andere Unterordner in `erinnerungen/` werden ignoriert und gemeldet.
 
-### Verwaltung direkt in der App
+### Verwaltung direkt in der App (am Handy, ohne GitHub-Oberfläche)
 
-*Platzhalter:* Fotos, Titel, Texte und Geheimnisse lassen sich später auch
-direkt in der App verwalten, ohne GitHub. Die Anleitung dazu wird nachgereicht.
+Fotos tauschen, hinzufügen, löschen, Titel, Texte und Notizen ändern, die Widmung und
+die Geheimnisse bearbeiten: alles direkt im Museum. Wer die Geste nicht kennt, sieht
+davon nichts.
+
+**Einmalig: Zugangsschlüssel (Token) anlegen**
+
+1. Auf dem Startbildschirm **5× schnell das Herz** neben dem Titel antippen. Es öffnet
+   sich „Verwaltung einrichten“.
+2. **GitHub öffnen** antippen, anmelden (<https://github.com/settings/personal-access-tokens/new>) und ausfüllen:
+   - **Token name:** `Museum`; **Expiration:** z. B. 1 Jahr
+   - **Repository access:** *Only select repositories* → `andyholiday/youtube`
+   - **Repository permissions:** **Contents** = *Read and write*, **Actions** = *Read-only*
+3. **Generate token**, den Token **kopieren** (er wird nur einmal gezeigt), zurück ins
+   Museum, in das Feld einfügen, **Prüfen**. Der Token bleibt nur auf diesem Handy.
+
+Danach zeigt ein kleiner Schraubenschlüssel oben rechts, dass die Verwaltung aktiv ist.
+
+**Benutzen**
+
+- **Foto ersetzen, bearbeiten, löschen:** Bild antippen. Unter dem Text stehen die Knöpfe
+  *Foto ersetzen* (verkleinert, Ortsdaten werden entfernt), *Titel, Text & Notiz* und *Löschen*
+  (mit Rückfrage). Das gilt auch für die Bilder im geheimen Raum.
+- **Foto hinzufügen, Widmung, Geheimnisse:** Schraubenschlüssel antippen. Mit „In den
+  geheimen Raum“ landet ein neues Foto dort.
+- **Verwaltung beenden** blendet alles wieder aus, **Token entfernen** löscht den Schlüssel vom Handy.
+
+Jede Änderung ist ein eigener Eintrag im Repository. Unten steht „Gespeichert – in ca.
+2 Minuten live“, dann „Jetzt live – Seite neu laden“. Gelöschtes zurückholen: im Repository
+unter „Commits“ den Eintrag „Erinnerung gelöscht: …“ öffnen und rückgängig machen (Revert).
+
+Wenn etwas hakt: *„Token ist ungültig oder abgelaufen“* → Verwaltung öffnen, Token
+entfernen, neu anlegen. *„Dafür fehlen die Rechte“* → beim Anlegen war Contents nicht auf
+Read and write oder das falsche Repository gewählt. *„Es gibt inzwischen einen neueren
+Stand“* → Seite neu laden und noch einmal versuchen.
+
+Das Repository ist öffentlich: Titel, Texte, auch die versteckten Notizen, und die Fotos
+kann jeder dort einsehen. Persönliches Geheimes gehört deshalb nicht hinein.
+
+### Überraschungen im Museum
+
+- **Herzregen:** In der Mitte des Rundgangs (zweiter Raum) hängt ein kleines Herz an der
+  Wand. Antippen lässt den Text aus `# Herzregen` fallen.
+- **Geheimer Raum:** Im letzten Raum führt hinter einer Efeuranke eine Tür in die Wand.
+  Einfach darauf zugehen. Die Fotos dafür liegen in `erinnerungen/geheim/`.
+- **Versteckte Notizen:** Ein Bild lange drücken (eine Büroklammer zeigt, wo es eine gibt).
+- **Paar-Ansicht:** Der Knopf oben rechts (oder Taste **V**) zeigt zwei Figuren Hand in
+  Hand von hinten.
+- **Besondere Tage zum Testen:** Die Adresse mit `?heute=02-14` am Ende öffnen (statt dem
+  echten Datum zählt dann der 14. Februar), z. B. `…github.io/youtube/?heute=02-14`.
 
 ### Wichtig
 

@@ -7,7 +7,7 @@ const ASPECTS = [[1600, 1200], [1200, 1600], [1200, 1200], [1600, 900], [900, 16
 async function memory({ L, test, D40, setPose }) {
   await test('Speicher: weit entfernte Räume geben Texturen frei und werden ausgeblendet (40 Bilder, < 30 Texturen)', D40, false, async (page) => {
     await L.enter(page);
-    const rooms = await page.evaluate(() => window.__museum.rooms);
+    const rooms = (await page.evaluate(() => window.__museum.rooms)).filter((r) => !r.secret); // geheimer Raum (Easter Egg) zählt nicht
     assert.strictEqual(rooms.length, 10);
     let peak = 0;
     for (const r of rooms) {
@@ -49,7 +49,7 @@ function frustumReport(args) {
       cam.rotation.set(pose.pitch, pose.yaw, 0);
       cam.updateMatrixWorld();
       const f = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
-      const d = rooms[0].doors.find((q) => q.to === 1);
+      const d = rooms[0].doors.find((q) => q.to === 1 && !q.secret);
       const dp = d && { e: [rooms[0].x1, d.center], w: [rooms[0].x0, d.center], s: [d.center, rooms[0].z1], n: [d.center, rooms[0].z0] }[d.wall];
       const door = !d || f.containsPoint(new THREE.Vector3(dp[0], d.height / 2, dp[1]));
       const pics = rooms[0].slots.filter((s) => f.containsPoint(new THREE.Vector3(s.x, s.y, s.z))).length;
@@ -117,7 +117,7 @@ async function joystick({ L, test }) {
     const g = await frac(page, 0.3, 0.8);
     await L.touch.start(page, [{ x: g.x, y: g.y, id: 1 }]);
     await L.touch.move(page, [{ x: g.x, y: g.y - 40, id: 1 }]);
-    await page.waitForTimeout(900);
+    await page.waitForFunction((q) => Math.hypot(window.__museum.pos.x - q.x, window.__museum.pos.z - q.z) > 0.1, a, { timeout: 20000 });
     const b = await L.pos(page);
     await L.touch.end(page);
     assert.ok(Math.hypot(b.x - a.x, b.z - a.z) > 0.1, 'Daumen in der Zone bewegt nicht');
@@ -145,7 +145,7 @@ async function joystickMulti({ L, test }) {
     await L.touch.move(page, [{ x: g.x, y: g.y - 40, id: 1 }]);
     await L.touch.start(page, [{ x: g.x, y: g.y - 40, id: 1 }, { x: s.x, y: s.y, id: 2 }]);
     for (let i = 1; i <= 6; i++) await L.touch.move(page, [{ x: g.x, y: g.y - 40, id: 1 }, { x: s.x - i * 15, y: s.y, id: 2 }]);
-    await page.waitForTimeout(500);
+    await page.waitForFunction((q) => Math.hypot(window.__museum.pos.x - q.x, window.__museum.pos.z - q.z) > 0.1 && Math.abs(window.__museum.pos.yaw - q.yaw) > 0.2, a, { timeout: 20000 });
     const b = await L.pos(page);
     await L.touch.end(page);
     assert.ok(Math.hypot(b.x - a.x, b.z - a.z) > 0.1 && Math.abs(b.yaw - a.yaw) > 0.2, 'Laufen und Umschauen nicht gleichzeitig');
@@ -229,7 +229,7 @@ async function display({ L, custom, test, browser, servers, D7 }) {
   });
   await test('Türen 3,2 m breit, Bilder ~30 % größer (Blickfang ≥ 3,5 m, kleinste ≤ 1,6 m)', D7, false, async (page) => {
     const rooms = await page.evaluate(() => window.__museum.rooms);
-    for (const r of rooms) for (const d of r.doors) assert.strictEqual(d.width, 3.2);
+    for (const r of rooms.filter((q) => !q.secret)) for (const d of r.doors.filter((q) => !q.secret)) assert.strictEqual(d.width, 3.2); // geheimer Raum: Türen 2,4 m
     const edges = rooms.flatMap((r) => r.slots.map((s) => Math.max(s.w, s.h)));
     assert.ok(Math.max(...edges) >= 3.5 && Math.min(...edges) <= 1.6, edges.join(','));
   });

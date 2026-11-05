@@ -1,0 +1,183 @@
+{
+ "erinnerungen": [
+  {
+   "bild": "erinnerungen/00.jpg",
+   "titel": "Erster Ausflug",
+   "datum": "2021-01-10",
+   "text": "Text zu Erster Ausflug.",
+   "breite": 1600,
+   "hoehe": 1200,
+   "quelle": "erinnerungen/00.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/01.jpg",
+   "titel": "Valentinstag",
+   "datum": "2022-02-11",
+   "text": "Text zu Valentinstag.",
+   "breite": 1200,
+   "hoehe": 1600,
+   "quelle": "erinnerungen/01.jpg",
+   "notiz": "Ich wusste schon beim ersten Blick,\ndass du die Richtige bist."
+  },
+  {
+   "bild": "erinnerungen/02.jpg",
+   "titel": "Sommerabend auf dem Balkon",
+   "datum": "2023-03-12",
+   "text": "Text zu Sommerabend auf dem Balkon.",
+   "breite": 1200,
+   "hoehe": 1200,
+   "quelle": "erinnerungen/02.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/03.jpg",
+   "titel": "Unser erster Urlaub",
+   "datum": "2024-04-13",
+   "text": "Text zu Unser erster Urlaub.",
+   "breite": 1600,
+   "hoehe": 900,
+   "quelle": "erinnerungen/03.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/04.jpg",
+   "titel": "Weihnachten",
+   "datum": "2021-05-14",
+   "text": "Text zu Weihnachten.",
+   "breite": 900,
+   "hoehe": 1600,
+   "quelle": "erinnerungen/04.jpg",
+   "notiz": "Der schönste Baum, weil du ihn ausgesucht hast."
+  },
+  {
+   "bild": "erinnerungen/05.jpg",
+   "titel": "Spaziergang im Frühling",
+   "datum": "2022-06-15",
+   "text": "Text zu Spaziergang im Frühling.",
+   "breite": 1500,
+   "hoehe": 1000,
+   "quelle": "erinnerungen/05.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/06.jpg",
+   "titel": "Zufallsfoto",
+   "datum": "2023-07-16",
+   "text": "Text zu Zufallsfoto.",
+   "breite": 1600,
+   "hoehe": 1200,
+   "quelle": "erinnerungen/06.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/07.jpg",
+   "titel": "Am Wasser",
+   "datum": "2024-08-17",
+   "text": "Text zu Am Wasser.",
+   "breite": 1400,
+   "hoehe": 1000,
+   "quelle": "erinnerungen/07.jpg",
+   "notiz": "Hier hab ich dich zum ersten Mal richtig lachen sehen."
+  },
+  {
+   "bild": "erinnerungen/08.jpg",
+   "titel": "Geburtstagskuchen",
+   "datum": "2021-09-18",
+   "text": "Text zu Geburtstagskuchen.",
+   "breite": 1200,
+   "hoehe": 1500,
+   "quelle": "erinnerungen/08.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/09.jpg",
+   "titel": "Kaffee am Morgen",
+   "datum": "2022-01-10",
+   "text": "Text zu Kaffee am Morgen.",
+   "breite": 1600,
+   "hoehe": 1000,
+   "quelle": "erinnerungen/09.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/10.jpg",
+   "titel": "Herbstlicht",
+   "datum": "2023-02-11",
+   "text": "Text zu Herbstlicht.",
+   "breite": 1000,
+   "hoehe": 1400,
+   "quelle": "erinnerungen/10.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/11.jpg",
+   "titel": "Der lange Abend",
+   "datum": "2024-03-12",
+   "text": "Text zu Der lange Abend.",
+   "breite": 1500,
+   "hoehe": 1200,
+   "quelle": "erinnerungen/11.jpg",
+   "notiz": null
+  },
+  {
+   "bild": "erinnerungen/12.jpg",
+   "titel": "Heimweg",
+   "datum": "2021-04-13",
+   "text": "Text zu Heimweg.",
+   "breite": 1600,
+   "hoehe": 900,
+   "quelle": "erinnerungen/12.jpg",
+   "notiz": null
+  }
+ ],
+ "widmung": null,
+ "geheim": {
+  "herzregen": "Ich liebe dich.",
+  "raumtext": "Schön, dass du ihn gefunden hast.",
+  "tage": [
+   {
+    "tag": "02-14",
+    "jahr": null,
+    "text": "Alles Liebe zum Valentinstag!"
+   },
+   {
+    "tag": "07-06",
+    "jahr": 2019,
+    "text": "Heute vor {jahre} Jahren saßen wir zum ersten Mal am Wasser."
+   }
+  ],
+  "raum": [
+   {
+    "bild": "erinnerungen/geheim/a.jpg",
+    "titel": "Zu zweit auf dem Wasser",
+    "datum": "2021-08-14",
+    "text": "Der Tag, an dem wir zum ersten Mal ein Boot gemietet haben.",
+    "breite": 1600,
+    "hoehe": 1200,
+    "quelle": "erinnerungen/geheim/a.jpg",
+    "notiz": "Du hast gelacht, obwohl wir fast nass geworden sind."
+   },
+   {
+    "bild": "erinnerungen/geheim/b.jpg",
+    "titel": "Unser Lied",
+    "datum": "2022-03-02",
+    "text": null,
+    "breite": 1200,
+    "hoehe": 1600,
+    "quelle": "erinnerungen/geheim/b.jpg",
+    "notiz": null
+   },
+   {
+    "bild": "erinnerungen/geheim/c.jpg",
+    "titel": "",
+    "datum": "2023-05-20",
+    "text": "Nur für uns.",
+    "breite": 1600,
+    "hoehe": 1000,
+    "quelle": "erinnerungen/geheim/c.jpg",
+    "notiz": null
+   }
+  ]
+ }
+}

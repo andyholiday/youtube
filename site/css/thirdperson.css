@@ -1,0 +1,28 @@
+/* Ansichtsknopf (Ich / Paar) im HUD – schlicht: Porzellanweiß, Anthrazit, Bordeaux. */
+.tp-knopf {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #2d2a2e;
+  background: rgba(255, 255, 255, .9);
+  border: 1px solid rgba(45, 42, 46, .16);
+  border-radius: 50%;
+  box-shadow: 0 4px 16px rgba(45, 42, 46, .18);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .3s, color .3s, transform .15s;
+}
+.tp-knopf svg { width: 28px; height: 28px; display: block; fill: currentColor; stroke: currentColor; }
+.tp-knopf[aria-pressed="true"] { color: #fff; background: #7a1f33; border-color: #7a1f33; }
+.tp-knopf:active { transform: scale(.94); }
+.tp-knopf:focus-visible { outline: 3px solid #2d2a2e; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .tp-knopf { transition: none; } }

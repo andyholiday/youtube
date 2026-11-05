@@ -6,6 +6,11 @@ const EDGE = 1.0; // Abstand Bildrahmen zur Ecke
 const DOOR_CLEAR = 0.9; // Abstand Bildrahmen zur Türkante
 const GAP_MIN = 0.4; // Mindestabstand zwischen zwei Bildern
 const PER_ROOM = 4;
+const SECRET_SIZE = 6; // geheimer Zusatzraum (Easter Egg): 6 × 6 m, hängt am letzten Raum
+const SECRET_DOOR_W = 2.4;
+const SECRET_DOOR_H = 3.4;
+const SECRET_HEIGHT = 5.2;
+const SECRET_SHIFT = 0.62; // Lage der Geheimtür an der Wand (Anteil des freien Wandstücks), absichtlich nicht mittig
 const MIN_INTERVAL = 1.2;
 const LONG = { L: 3.9, M: 2.35, S: 1.45 }; // lange Kante je Größenstufe (in 8 m hohen Räumen wirken Bilder sonst klein)
 const MAX_W = 4.4;
@@ -47,6 +52,27 @@ function connect(a, b, dir) {
   const center = cm((Math.max(...lo) + Math.min(...hi)) / 2);
   a.doors.push({ wall: dir, center, width: DOOR_W, height: DOOR_H, to: b.id });
   b.doors.push({ wall: OPPOSITE[dir], center, width: DOOR_W, height: DOOR_H, to: a.id });
+}
+
+/**
+ * Geheimer Raum (Easter Egg): 6 × 6 m, an der Wand des letzten Raums, an der der Rundgang weiterginge.
+ * Die Tür im Gastgeberraum trägt secret: true (Themen zeichnen dort eine geschlossene Wand, die Kollision lässt sie offen).
+ */
+function addSecretRoom(rooms) {
+  const host = rooms[rooms.length - 1];
+  const dir = host.id % 2 === 0 ? 'e' : 's';
+  const horiz = dir === 's';
+  const [lo, hi] = horiz ? [host.x0, host.x1] : [host.z0, host.z1];
+  const start = cm(lo + (hi - lo - SECRET_SIZE) * SECRET_SHIFT);
+  const x0 = horiz ? start : host.x1 + GAP;
+  const z0 = horiz ? host.z1 + GAP : start;
+  const room = { id: rooms.length, theme: 'geheim', secret: true, x0, z0, x1: cm(x0 + SECRET_SIZE), z1: cm(z0 + SECRET_SIZE),
+    height: SECRET_HEIGHT, doors: [], slots: [] };
+  const center = cm(start + SECRET_SIZE / 2);
+  const door = { center, width: SECRET_DOOR_W, height: SECRET_DOOR_H };
+  host.doors.push({ ...door, wall: dir, to: room.id, secret: true });
+  room.doors.push({ ...door, wall: OPPOSITE[dir], to: host.id });
+  rooms.push(room);
 }
 
 function dims(item, edge) {
@@ -104,7 +130,7 @@ function assign(room, ivs, pics, entryWall) {
   }
   const rest = pics.filter((q) => q !== big);
   // Mindestens ein Bild neben der Ausgangstür: Blick auf Tür und Bild zugleich (Start, Weitergehen).
-  const exit = room.doors.find((d) => d.to > room.id);
+  const exit = room.doors.find((d) => d.to > room.id && !d.secret);
   const beside = exit && ivs.filter((iv) => iv.wall === exit.wall && free(iv) >= rest[0].fw + GAP_MIN)
     .reduce((best, cur) => (!best || free(cur) > free(best) ? cur : best), null);
   if (beside && rest.length) beside.pics.push(rest.shift());
@@ -158,14 +184,14 @@ export function buildLayout(items, themes) {
     entry.push(dir ? OPPOSITE[dir] : 's');
     rooms.push(room);
   }
-  if (n === 0) {
-    Object.assign(rooms[0], { x1: 12, z1: 12, height: 8 });
-    return rooms;
-  }
-  const base = Math.floor(n / rooms.length);
+  if (n === 0) Object.assign(rooms[0], { x1: 12, z1: 12, height: 8 });
+  const normal = rooms.length;
+  addSecretRoom(rooms); // vor den Bildern, damit diese der Geheimtür ausweichen
+  if (n === 0) return rooms;
+  const base = Math.floor(n / normal);
   let start = 0;
-  rooms.forEach((room, i) => {
-    const count = base + (i < n % rooms.length ? 1 : 0);
+  rooms.slice(0, normal).forEach((room, i) => {
+    const count = base + (i < n % normal ? 1 : 0);
     if (count) placeSlots(room, picsFor(room, items, start, count), entry[i]);
     start += count;
   });
@@ -232,7 +258,7 @@ function bestFrom(spot, door, pics, eye, canStand) {
  * (falls vorhanden) und mindestens ein Bild im Blick sind. canStand(x, z) schließt Deko aus.
  */
 export function startPose(room, canStand, eye = 1.65) {
-  const door = room.doors.find((d) => d.to === room.id + 1);
+  const door = room.doors.find((d) => d.to === room.id + 1 && !d.secret);
   const doorPt = door && doorPoint(room, door);
   const pics = room.slots.map((s) => ({ x: s.x, y: s.y, z: s.z, wall: s.wall }));
   const home = { x: (room.x0 + room.x1) / 2, z: room.z1 - 2.2 };

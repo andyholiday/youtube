@@ -56,8 +56,8 @@ async function uiCalls({ L, test, custom, browser, servers, D7, D40, hold, setPo
     assert.deepStrictEqual(await L.uiCalls(page, 'roomEntered'), [], 'roomEntered vor dem Eintreten');
     await L.enter(page);
     assert.deepStrictEqual(await L.uiCalls(page, 'roomEntered'), [['roomEntered', { id: 0, theme: 'modern' }]]);
-    await hold(page, 'KeyW', 500);
-    await hold(page, 'KeyW', 300);
+    await page.keyboard.down('KeyW'); // halten, bis die Bewegung bemerkt wurde (Bildrate im Software-Renderer schwankt)
+    try { await page.waitForFunction(() => window.__uiCalls.some((c) => c[0] === 'markInteracted' && c[1] === 'move'), null, { timeout: 20000 }); } finally { await page.keyboard.up('KeyW'); }
     await page.mouse.move(640, 700);
     await page.mouse.down();
     await page.mouse.move(700, 700, { steps: 4 });
@@ -72,7 +72,7 @@ async function uiCalls({ L, test, custom, browser, servers, D7, D40, hold, setPo
     await L.enter(page);
     for (const i of [3, 6]) {
       await page.evaluate((n) => window.__museum.faceEntry(n), i);
-      await page.waitForTimeout(500);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
       const p = await page.evaluate((n) => window.__museum.screenPositionOf(n), i);
       await page.mouse.click(p.x, p.y);
       await waitCall(page, 'openLightbox', `c[1] === ${i}`);

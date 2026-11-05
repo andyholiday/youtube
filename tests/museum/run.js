@@ -49,6 +49,8 @@ async function holdUntil(page, key, cond, arg, timeout = 20000) {
   await page.keyboard.down(key);
   try { await page.waitForFunction(([c, a]) => new Function('pos', 'a', `return ${c}`)(window.__museum.pos, a), [cond, arg], { timeout }); } finally { await page.keyboard.up(key); }
 }
+/** Wartet drei gezeichnete Bilder (Kamera und Bildschirmpositionen folgen der neuen Pose; Bildrate im Software-Renderer schwankt). */
+const settle = (page) => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
 const setPose = (page, p) => page.evaluate((q) => window.__museum.setPose(q), p);
 const getRooms = (page) => page.evaluate(() => window.__museum.rooms);
 const YAW = { n: 0, s: Math.PI, w: Math.PI / 2, e: -Math.PI / 2 }; // Blickrichtung zur Wand
@@ -131,8 +133,8 @@ async function suiteLayout() {
   });
   await plain('Alle Räume sind vom Start über Türen erreichbar', async () => {
     for (const [n, rooms] of Object.entries(layouts)) assert.deepStrictEqual(C.reachable(rooms), [], `n=${n}`);
-    assert.strictEqual(layouts[13].length, 4, '13 Bilder -> 4 Räume');
-    assert.ok(layouts[7].length >= 3, '7 Bilder -> mind. 3 Räume');
+    assert.strictEqual(C.normal(layouts[13]).length, 4, '13 Bilder -> 4 Räume (ohne geheimen Raum)');
+    assert.ok(C.normal(layouts[7]).length >= 3, '7 Bilder -> mind. 3 Räume');
   });
   await plain('Rundgang hat Ecken (Richtungswechsel), Türen auf wechselnden Wänden', async () => {
     for (const n of [7, 13, 25]) assert.deepStrictEqual(C.hasCorner(layouts[n]), [], `n=${n}`);
@@ -148,17 +150,21 @@ async function suiteLayout() {
     const sizes = layouts[7].flatMap((r) => r.slots.map((s) => C.longEdge(s)));
     assert.ok(C.distinctSizes(layouts[7]) >= 3, `nur ${C.distinctSizes(layouts[7])} Größen`);
     assert.ok(Math.max(...sizes) >= 3.2 && Math.min(...sizes) <= 1.7, sizes.join(','));
-    for (const r of layouts[7]) assert.ok(r.slots.some((s) => C.longEdge(s) >= 3.0), `Raum ${r.id} ohne Blickfang`);
+    for (const r of C.normal(layouts[7])) assert.ok(r.slots.some((s) => C.longEdge(s) >= 3.0), `Raum ${r.id} ohne Blickfang`);
   });
-  await plain('Leere Liste: ein Raum, keine Tür, kein Bild', async () => {
-    assert.strictEqual(layouts[0].length, 1);
-    assert.deepStrictEqual([layouts[0][0].doors.length, layouts[0][0].slots.length], [0, 0]);
+  await plain('Leere Liste: ein Raum, keine Tür (außer der geheimen), kein Bild', async () => {
+    assert.strictEqual(C.normal(layouts[0]).length, 1);
+    assert.deepStrictEqual([layouts[0][0].doors.filter((d) => !d.secret).length, layouts[0][0].slots.length], [0, 0]);
+  });
+  await plain('Geheimer Raum: immer genau einer, 6 × 6 m, am letzten Raum, ohne Bilder (0–40 Bilder)', async () => {
+    for (const [n, rooms] of Object.entries(layouts)) assert.deepStrictEqual(C.secretRoom(rooms), [], `n=${n}`);
   });
   await test('App nutzt das Layout: 3 Räume, Themen der Reihe nach, Decke gebaut ≥ 7 m', D7, false, async (page) => {
-    const rooms = await getRooms(page);
+    const all = await getRooms(page);
+    const rooms = C.normal(all);
     assert.strictEqual(rooms.length, 3);
     assert.deepStrictEqual(rooms.map((r) => r.theme), ['modern', 'klassisch', 'futuristisch']);
-    assert.deepStrictEqual(C.checkAll(rooms, 7), []);
+    assert.deepStrictEqual(C.checkAll(all, 7), []);
     for (const r of rooms) assert.ok(await page.evaluate((i) => window.__museum.ceilingY(i), r.id) >= 7, `Raum ${r.id} Decke zu niedrig`);
   });
 }
@@ -177,7 +183,7 @@ async function suiteWorld() {
   });
   await test('Leere Liste: Hinweis im leeren Saal, keine Fehler', 'data-0.json', false, async (page) => {
     await L.enter(page);
-    assert.strictEqual((await getRooms(page)).length, 1);
+    assert.strictEqual(C.normal(await getRooms(page)).length, 1);
     const hint = page.locator('#leer-hinweis');
     await hint.waitFor({ state: 'visible' });
     assert.match(await hint.innerText(), /Noch hängt hier nichts/);
@@ -186,7 +192,7 @@ async function suiteWorld() {
     await L.enter(page);
     await page.waitForFunction(() => window.__museum.texturesLoaded() === 1);
     await page.evaluate(() => window.__museum.faceEntry(0));
-    await page.waitForTimeout(300);
+    await settle(page);
     const p = await page.evaluate(() => window.__museum.screenPositionOf(0));
     await page.mouse.click(p.x, p.y);
     await page.waitForSelector('#lightbox:not([hidden])', { timeout: 5000 });
@@ -210,19 +216,19 @@ async function suiteDesktop() {
   await test('Desktop: W/S und A/D ändern die Kameraposition', D7, false, async (page) => {
     await L.enter(page);
     const a = await L.pos(page);
-    await hold(page, 'KeyW', 700);
+    await holdUntil(page, 'KeyW', 'pos.z < a - 0.1', a.z);
     const b = await L.pos(page);
     assert.ok(b.z < a.z - 0.1, `z ${a.z} -> ${b.z}`);
-    await hold(page, 'KeyD', 700);
+    await holdUntil(page, 'KeyD', 'pos.x > a + 0.1', b.x);
     const c = await L.pos(page);
     assert.ok(c.x > b.x + 0.1, `x ${b.x} -> ${c.x}`);
-    await hold(page, 'KeyS', 700);
+    await holdUntil(page, 'KeyS', 'pos.z > a + 0.05', b.z);
     assert.ok((await L.pos(page)).z > b.z + 0.05);
   });
   await test('Desktop: Pfeiltasten laufen/drehen, Maus-Ziehen schaut um', D7, false, async (page) => {
     await L.enter(page);
     const a = await L.pos(page);
-    await hold(page, 'ArrowUp', 600);
+    await holdUntil(page, 'ArrowUp', 'pos.z < a - 0.1', a.z);
     assert.ok((await L.pos(page)).z < a.z - 0.1);
     const y0 = (await L.pos(page)).yaw;
     await holdUntil(page, 'ArrowLeft', 'pos.yaw > a + 0.3', y0);
@@ -287,7 +293,7 @@ async function suiteMobile() {
     await L.touch.start(page, [{ x: c.x, y: c.y, id: 1 }]);
     assert.ok(await page.locator('#joystick.aktiv').count(), 'Joystick nicht aktiv unter dem Daumen');
     await L.touch.move(page, [{ x: c.x, y: c.y - 40, id: 1 }]);
-    await page.waitForTimeout(900);
+    await page.waitForFunction((z) => window.__museum.pos.z < z - 0.1, a.z, { timeout: 20000 });
     const b = await L.pos(page);
     assert.ok(b.z < a.z - 0.1, `Joystick vor: z ${a.z} -> ${b.z}`);
     await L.touch.end(page);
@@ -297,7 +303,7 @@ async function suiteMobile() {
     assert.ok(Math.abs((await L.pos(page)).z - s1.z) < 1e-6, 'bewegt sich nach Loslassen weiter');
     await L.touch.start(page, [{ x: c.x, y: c.y, id: 1 }]);
     await L.touch.move(page, [{ x: c.x + 40, y: c.y, id: 1 }]);
-    await page.waitForTimeout(700);
+    await page.waitForFunction((x) => window.__museum.pos.x > x + 0.1, s1.x, { timeout: 20000 });
     await L.touch.end(page);
     assert.ok((await L.pos(page)).x > s1.x + 0.1, 'Joystick rechts ändert x nicht');
   });
@@ -314,7 +320,7 @@ async function suiteMobile() {
     await L.touch.move(page, [{ x: c.x, y: c.y - 40, id: 1 }]);
     await L.touch.start(page, [{ x: c.x, y: c.y - 40, id: 1 }, { x: 250, y: 300, id: 2 }]);
     for (let i = 1; i <= 6; i++) await L.touch.move(page, [{ x: c.x, y: c.y - 40, id: 1 }, { x: 250 - i * 15, y: 300, id: 2 }]);
-    await page.waitForTimeout(500);
+    await page.waitForFunction((q) => Math.hypot(window.__museum.pos.x - q.x, window.__museum.pos.z - q.z) > 0.1, a, { timeout: 20000 });
     const b = await L.pos(page);
     await L.touch.end(page);
     assert.ok(Math.hypot(b.x - a.x, b.z - a.z) > 0.1, 'Joystick bewegt nicht neben dem Wischen');
@@ -359,7 +365,7 @@ async function suiteLightbox() {
       [6, 'Zufallsfoto', '', 'Ohne Datum, aber nicht ohne Herz.']];
     for (const [i, titel, datum, text] of cases) {
       await page.evaluate((n) => window.__museum.faceEntry(n), i);
-      await page.waitForTimeout(500);
+      await settle(page);
       const p = await page.evaluate((n) => window.__museum.screenPositionOf(n), i);
       assert.ok(p.visible, `Bild ${i} nicht sichtbar`);
       await page.mouse.click(p.x, p.y);
@@ -384,14 +390,14 @@ async function suiteLightbox() {
     const dx = slot.x - from.x;
     const dz = slot.z - from.z;
     await setPose(page, { ...from, yaw: Math.atan2(-dx, -dz), pitch: Math.atan2(slot.y - 1.65, Math.hypot(dx, dz)) });
-    await page.waitForTimeout(500);
+    await settle(page);
     const p = await page.evaluate((i) => window.__museum.screenPositionOf(i), slot.index);
     assert.ok(p.visible, 'Bild liegt nicht im Bildausschnitt (Testaufbau)');
     await page.mouse.click(p.x, p.y);
     await page.waitForTimeout(500);
     assert.ok(await page.locator('#lightbox').isHidden(), 'Großansicht trotz Wand');
     await page.evaluate((i) => window.__museum.faceEntry(i), slot.index); // Kontrolle: frei davor öffnet es
-    await page.waitForTimeout(500);
+    await settle(page);
     const q = await page.evaluate((i) => window.__museum.screenPositionOf(i), slot.index);
     await page.mouse.click(q.x, q.y);
     await page.waitForSelector('#lightbox:not([hidden])', { timeout: 5000 });
@@ -402,7 +408,7 @@ async function suiteLightbox3() {
   await test('Handy: Tippen öffnet Großansicht, Schließen per Knopf und Tippen daneben', D7, true, async (page) => {
     await L.enter(page);
     await page.evaluate(() => window.__museum.faceEntry(1));
-    await page.waitForTimeout(500);
+    await settle(page);
     const p = await page.evaluate(() => window.__museum.screenPositionOf(1));
     await page.touchscreen.tap(p.x, p.y);
     await page.waitForSelector('#lightbox:not([hidden])', { timeout: 5000 });
@@ -422,7 +428,7 @@ async function suiteLightbox2() {
   await test('Handy: Wischen über ein Bild öffnet nichts (Bewegungsschwelle)', D7, true, async (page) => {
     await L.enter(page);
     await page.evaluate(() => window.__museum.faceEntry(0));
-    await page.waitForTimeout(500);
+    await settle(page);
     const p = await page.evaluate(() => window.__museum.screenPositionOf(0));
     const y0 = (await L.pos(page)).yaw;
     await L.touch.start(page, [{ x: p.x, y: p.y, id: 3 }]);
@@ -435,7 +441,7 @@ async function suiteLightbox2() {
   await test('Während der Großansicht läuft die Kamera nicht weiter', D7, false, async (page) => {
     await L.enter(page);
     await page.evaluate(() => window.__museum.faceEntry(0));
-    await page.waitForTimeout(400);
+    await settle(page);
     const p = await page.evaluate(() => window.__museum.screenPositionOf(0));
     await page.mouse.click(p.x, p.y);
     await page.waitForSelector('#lightbox:not([hidden])');

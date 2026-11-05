@@ -33,11 +33,14 @@ ctx = {
   onStartHeartTap(fn),       // fn(countInLast3s) beim Antippen des Herzens im Startbildschirm
   onRoomEnter(fn),           // fn(room)
   onLightboxOpen(fn),        // fn(index, actionsEl): actionsEl = leerer Container in der Großansicht für Zusatzknöpfe
+  onViewerOpen(fn),          // fn(item, actionsEl): eigene Großansichten (z. B. geheimer Raum) melden sich per ctx.viewerOpened(item, actionsEl)
+  viewerOpened(item, el),    // von Modulen mit eigener Großansicht aufzurufen
   setInputPaused(bool),      // Steuerung an/aus (z. B. während Verwaltungsdialogen)
   ui: { overlayRoot, hud, addStyle(href), toast(text, ms) },
   // overlayRoot: Container über allem für eigene Overlays
   // hud: Container oben rechts für kleine Knöpfe (Safe-Area beachtet), ≥ 44 px Ziele
 }
 ```
+- Jedes Modul bekommt ein eigenes `ctx`; `setInputPaused` wirkt je Modul, die Steuerung ruht, solange eines pausiert.
 - Third Person setzt die Kamera in `onFrame` nach (main hat sie vorher auf die Ich-Pose gesetzt).
 - Klick/Tap-Raycasts nutzen die aktuelle Kamera; Figuren sind nicht anklickbar (`layers`/`userData.noPick`).

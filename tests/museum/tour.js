@@ -1,6 +1,7 @@
 // Gesamtrundgang mit 3D und den echten Fotos aus erinnerungen/: baut die Seite wie die Action (tools/build.py), liefert sie lokal aus
 // und geht auf iPhone 13 (hoch, quer) und am Desktop durch: Eintreten, Raumtitel, Beschriftung, Großansicht, alle 4 Räume,
-// alle 13 Bilder entdecken, Abschlusskarte mit Widmung. Screenshots (JPEG) landen in screenshots/.
+// alle 13 Bilder entdecken, Abschlusskarte mit Widmung; dazu v4: Paar-Ansicht, Herzregen, Notiz (langes Drücken), geheimer Raum,
+// besonderer Tag (?heute=02-14) und der Verwaltungsmodus (5× Herz, GitHub-API gemockt). Screenshots (JPEG) landen in screenshots/.
 // Aufruf: node tests/museum/tour.js   (Exit-Code 1 bei Konsolenfehlern, fremden Anfragen, Überlappungen oder verfehlten Schritten)
 const fs = require('fs');
 const os = require('os');
@@ -10,6 +11,8 @@ const { pathToFileURL } = require('url');
 const { execFileSync } = require('child_process');
 const L = require('./lib');
 const T = require('./tour-steps');
+const V4 = require('./tour-v4');
+const { openApp } = require('./features/integration/server');
 
 const OUT = path.join(__dirname, 'screenshots');
 const ROOM_NAMES = { modern: 'Die weiße Galerie', klassisch: 'Der Festsaal', futuristisch: 'Der Lichtraum', garten: 'Der Wintergarten' };
@@ -48,6 +51,7 @@ async function lightboxRound(page, d, data, idx) {
   const title = (i) => items[i].titel || data.dateOf(items[i]);
   assert.strictEqual(await T.text(page, '#lb-titel'), title(idx));
   assert.strictEqual(await T.text(page, '#lb-zaehler'), `${idx + 1} / ${items.length}`);
+  assert.strictEqual(await page.locator('.lb-aktionen > *').count(), 0, 'Verwaltungsknöpfe ohne aktiven Modus');
   await T.shot(page, `${d.prefix}-gross`, T.LIGHTBOX);
   await T.swipeLeft(page, d.mobile);
   const next = (idx + 1) % items.length;
@@ -106,18 +110,23 @@ async function discoverAll(page, d, data, rooms) {
 }
 
 /** Ein kompletter Rundgang auf einem Gerät; gibt die gesammelten Konsolenfehler und fremden Anfragen zurück. */
-async function tour(browser, url, d, data) {
-  const page = await L.newPage(browser, { mobile: d.mobile, landscape: d.landscape });
-  await L.openMuseum(page, url);
-  const rooms = await page.evaluate(() => window.__museum.rooms);
+async function tour(browser, srv, d, data) {
+  const page = await openApp(browser, srv, { mobile: d.mobile, landscape: d.landscape });
+  const rooms = (await page.evaluate(() => window.__museum.rooms)).filter((r) => !r.secret); // geheimer Raum (Easter Egg) zählt nicht
   assert.strictEqual(rooms.length, 4, `erwartet 4 Räume, gefunden ${rooms.length}`);
   assert.strictEqual(await page.evaluate(() => window.__museum.count), 13);
   await enterAndLook(page, d, rooms);
   await lightboxRound(page, d, data, rooms[0].slots[0].index);
   if (d.mobile) { await T.focusPicture(page, rooms[0].slots[0].index, data.nameOf(data.items[rooms[0].slots[0].index])); await joystickUnderCaption(page, d); }
+  await V4.paar(page, d, true);
+  await T.shot(page, `${d.prefix}-paar`);
   for (const r of rooms.slice(0, -1)) await nextRoom(page, d, rooms, r);
+  await V4.paar(page, d, false);
+  await V4.heartRain(page, d, data);
+  await V4.noteLong(page, d, data);
+  await V4.secretRoom(page, d, data);
   await discoverAll(page, d, data, rooms);
-  const problems = [...page.errors, ...page.external.map((u) => `fremde Anfrage: ${u}`)];
+  const problems = require('./features/integration/helpers').problems(page);
   await page.context().close();
   return problems;
 }
@@ -125,7 +134,7 @@ async function tour(browser, url, d, data) {
 async function loadData(siteDir) {
   const json = JSON.parse(fs.readFileSync(path.join(siteDir, 'erinnerungen.json'), 'utf8'));
   const { nameUndDatum, formatDatum } = await import(pathToFileURL(path.join(L.ROOT, 'site', 'js', 'format.js')).href);
-  return { items: json.erinnerungen, nameOf: nameUndDatum, dateOf: (i) => formatDatum(i.datum), widmung: readWidmung() };
+  return { json, items: json.erinnerungen, geheim: json.geheim, nameOf: nameUndDatum, dateOf: (i) => formatDatum(i.datum), widmung: readWidmung() };
 }
 
 (async () => {
@@ -139,9 +148,13 @@ async function loadData(siteDir) {
   const errors = [];
   try {
     const data = await loadData(siteDir);
+    srv.data = data.json;
     for (const d of DEVICES) {
       console.log(`Rundgang ${d.prefix}`);
-      errors.push(...await tour(browser, srv.url, d, data));
+      errors.push(...await tour(browser, srv, d, data));
+      if (d.landscape) continue; // Verwaltung und besonderer Tag: Handy hochkant und Desktop
+      console.log(`Verwaltung und besonderer Tag ${d.prefix}`);
+      errors.push(...await V4.adminRound(browser, srv, d), ...await V4.dayRound(browser, srv, d));
     }
     console.log(errors.length ? `Fehler: ${errors.join(' | ')}` : 'Keine Konsolenfehler, keine fremden Anfragen, alle Schritte auf allen Geräten bestanden.');
   } catch (err) {

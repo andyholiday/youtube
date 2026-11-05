@@ -1,5 +1,5 @@
 # Roadmap
 
-**Stand (2026-11-04):** v3 live (Review-Verbesserungen, weißes Herz, robuster Upload); offen: Andres Entscheidungen Datenschutz/Domain/Branch, echter Handy-Test.
+**Stand (2026-11-05):** v4 live (Paar-Ansicht, Easter Eggs, versteckte Verwaltung); offen: Andres Texte/Fotos, Handy-Test, Datenschutz/Domain/Branch.
 
 - [~] Erinnerungsmuseum mit Herz-QR (Test im Repo youtube)

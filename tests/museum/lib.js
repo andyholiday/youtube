@@ -70,9 +70,14 @@ async function newPage(browser, { mobile = false, landscape = false, spy = true 
   await context.route('https://cdn.jsdelivr.net/**', (route) => route.abort());
   const page = await context.newPage();
   page.errors = [];
+  page.warnings = []; // console.warn der Seite, z. B. „Feature … nicht geladen“
   page.external = [];
   page.on('request', (r) => { if (!r.url().startsWith('http://127.0.0.1') && !r.url().startsWith('data:')) page.external.push(r.url()); });
-  page.on('console', (m) => { if (m.type() === 'error') page.errors.push(`console: ${m.text()}`); });
+  // Auch ein 404 eines Feature-Moduls (js/features/) ist ein Fehler.
+  page.on('console', (m) => {
+    if (m.type() === 'error') page.errors.push(`console: ${m.text()}`);
+    if (m.type() === 'warning') page.warnings.push(m.text());
+  });
   page.on('pageerror', (e) => page.errors.push(`pageerror: ${e.message}`));
   page.on('requestfailed', (r) => page.errors.push(`requestfailed: ${r.url()}`));
   if (spy) await page.addInitScript(uiSpyScript);

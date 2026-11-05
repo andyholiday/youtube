@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Admin-Harness</title>
+  <script>if ('ontouchstart' in window || navigator.maxTouchPoints > 0) document.documentElement.classList.add('touch');</script>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/lightbox.css">
+  <style>
+    .herz { animation: none !important; }
+    /* wie ui-extras.js (Paket H) */
+    #overlay-root { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+    #hud { position: fixed; z-index: 6; top: calc(var(--s-o) + 44px); right: var(--s-r); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+    #hud > * { pointer-events: auto; min-width: 44px; min-height: 44px; }
+    body:not(.im-saal) #hud, body.lb-offen #hud, #hud:empty { display: none; }
+    .lb-aktionen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .lb-aktionen:empty { display: none; }
+    .test-toast { position: absolute; left: 50%; top: calc(var(--s-o) + 96px); transform: translateX(-50%); max-width: calc(100% - 32px); padding: .6em 1.2em; border-radius: 18px; text-align: center; color: #fff; background: var(--pille); }
+    body { background: #d9dfe6 url(erinnerungen/2021-05-01_erster-ausflug.jpg) center / cover; }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="herz-form" viewBox="0 0 32 29"><path d="M16 28C5 20 1 14 1 8.5 1 4 4.5 1 8.5 1 11.7 1 14.5 2.8 16 6 17.5 2.8 20.3 1 23.5 1 27.5 1 31 4 31 8.5 31 14 27 20 16 28Z"/></symbol>
+  </svg>
+  <div id="hud"></div>
+  <section id="start" class="overlay">
+    <div class="karte">
+      <h1><span>Für dich</span> <svg class="herz" aria-label="Herz" role="img"><use href="#herz-form"/></svg></h1>
+      <p class="unter">Ein kleines Museum voller Erinnerungen.</p>
+      <button id="start-btn" type="button">Eintreten</button>
+    </div>
+  </section>
+  <section id="lightbox" class="overlay" hidden role="dialog" aria-modal="true">
+    <button id="lb-close" type="button" aria-label="Schließen">&times;</button>
+    <article class="lb-karte">
+      <div class="lb-bild"><img id="lb-img" alt=""></div>
+      <div class="lb-info">
+        <p id="lb-zaehler" class="lb-zaehler"></p>
+        <h2 id="lb-titel"></h2>
+        <p id="lb-datum" class="datum"></p>
+        <p id="lb-text" class="text"></p>
+        <div id="lb-actions" class="lb-aktionen"></div>
+      </div>
+    </article>
+  </section>
+  <div id="overlay-root"></div>
+<script type="module">
+// Mini-ctx nach .planning/SPEC-FEATURES.md: nur das, was das Admin-Modul braucht.
+const q = new URLSearchParams(location.search);
+const items = await (await fetch('items.json')).json();
+if (q.has('noquelle')) items.forEach((i) => delete i.quelle);
+const heartHandlers = [];
+const lightboxHandlers = [];
+const taps = [];
+const styleLoads = new Map();
+// Testhilfe: Zeitpunkte (Seitenuhr) der Statusabfragen.
+window.__fetchTimes = [];
+const realFetch = window.fetch.bind(window);
+window.fetch = (u, o) => { if (String(u).includes('/actions/runs')) window.__fetchTimes.push(Date.now()); return realFetch(u, o); };
+window.__log = { styles: [], paused: [], toasts: [] };
+const ctx = {
+  items,
+  data: { erinnerungen: items },
+  setInputPaused: (b) => window.__log.paused.push(b),
+  onStartHeartTap: (fn) => heartHandlers.push(fn),
+  onLightboxOpen: (fn) => lightboxHandlers.push(fn),
+  ui: {
+    overlayRoot: document.getElementById('overlay-root'),
+    hud: document.getElementById('hud'),
+    addStyle(href) {
+      window.__log.styles.push(href);
+      if (!styleLoads.has(href)) {
+        styleLoads.set(href, new Promise((resolve) => {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = href;
+          link.addEventListener('load', () => resolve(true));
+          link.addEventListener('error', () => resolve(false));
+          document.head.append(link);
+        }));
+      }
+      return styleLoads.get(href);
+    },
+    toast(text) {
+      window.__log.toasts.push(text);
+      const t = document.createElement('p');
+      t.className = 'test-toast';
+      t.textContent = text;
+      document.getElementById('overlay-root').append(t);
+      setTimeout(() => t.remove(), 6000);
+    },
+  },
+};
+document.querySelector('#start .herz').addEventListener('click', () => {
+  const now = Date.now();
+  taps.push(now);
+  const recent = taps.filter((t) => now - t <= 3000).length;
+  heartHandlers.forEach((fn) => fn(recent));
+});
+// Wie „Eintreten“: Startbildschirm weg, Saal aktiv (erst dann zeigt die echte Seite den HUD).
+window.__enter = () => { document.getElementById('start').hidden = true; document.body.classList.add('im-saal'); };
+window.__openLightbox = (i) => {
+  const it = items[i];
+  document.getElementById('start').hidden = true;
+  document.body.classList.add('lb-offen', 'im-saal');
+  document.getElementById('lightbox').hidden = false;
+  document.getElementById('lb-img').src = it.bild;
+  document.getElementById('lb-titel').textContent = it.titel;
+  document.getElementById('lb-datum').textContent = it.datum || '';
+  document.getElementById('lb-text').textContent = it.text || '';
+  document.getElementById('lb-zaehler').textContent = `${i + 1} / ${items.length}`;
+  lightboxHandlers.forEach((fn) => fn(i, document.getElementById('lb-actions')));
+};
+document.getElementById('lb-close').addEventListener('click', () => { document.getElementById('lightbox').hidden = true; document.body.classList.remove('lb-offen'); });
+const { install } = await import('./js/features/admin/index.js');
+install(ctx);
+window.__ready = true;
+</script>
+</body>
+</html>

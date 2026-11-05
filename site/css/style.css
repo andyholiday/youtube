@@ -47,7 +47,7 @@ body.lb-offen #joystick { display: none !important; }
 .pille, .hinweis, .beschriftung { color: #fff; background: var(--pille); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .pille { position: fixed; z-index: 4; top: var(--s-o); left: 0; right: 0; margin: 0 auto; width: max-content; padding: .35em .95em; border-radius: 999px; font-size: .95rem; letter-spacing: .03em; white-space: nowrap; pointer-events: none; }
 body:not(.im-saal) .pille, body:not(.im-saal) .beschriftung, body:not(.im-saal) .raumtitel { display: none; }
-.hinweis { position: fixed; left: 0; right: 0; margin: 0 auto; width: max-content; top: calc(var(--s-o) + 44px); z-index: 4; padding: .6em 1.2em; max-width: calc(100% - 32px); text-align: center; font-size: 1rem; line-height: 1.4; border-radius: 18px; white-space: pre-line; text-wrap: balance; pointer-events: none; animation: ein .5s ease-out; transition: opacity .8s; }
+.hinweis { position: fixed; left: 0; right: 0; margin: 0 auto; width: max-content; top: calc(var(--s-o) + 44px); z-index: 4; padding: .6em 1.2em; max-width: calc(100% - 2 * (var(--s-r) + 56px)); text-align: center; font-size: 1rem; line-height: 1.4; border-radius: 18px; white-space: pre-line; text-wrap: balance; pointer-events: none; animation: ein .5s ease-out; transition: opacity .8s; }
 .hinweis.leer { top: 24%; border-radius: 18px; font-size: 1.1rem; line-height: 1.4; padding: 1em 1.4em; width: min(420px, calc(100% - 32px)); }
 .weg { opacity: 0; }
 @keyframes ein { from { opacity: 0; } to { opacity: 1; } }

@@ -9,9 +9,13 @@ export const WALLS = ['n', 's', 'w', 'e'];
 const FRONT_DEPTH = 2.4; // Tiefe der freien Zone vor einer Tür
 const PATH_HALF = 1.1; // halbe Breite der freien Achse zwischen Türen
 
-/** Raum mit Standardwerten, damit Themen nie auf undefined stoßen. */
+/**
+ * Raum mit Standardwerten, damit Themen nie auf undefined stoßen. Geheimtüren (secret: true) wandern aus
+ * `doors` nach `secretDoors`: Themen zeichnen dort eine geschlossene Wand (shell setzt ein Wandpaneel ein).
+ */
 export function normalizeRoom(room) {
-  return { doors: [], slots: [], height: 8, ...room };
+  const all = room.doors || [];
+  return { slots: [], height: 8, ...room, doors: all.filter((d) => !d.secret), secretDoors: all.filter((d) => d.secret) };
 }
 
 /** Wand-Koordinaten: t läuft entlang der Wand, d ist der Abstand von der Innenfläche nach innen. */
@@ -50,20 +54,66 @@ export function spans(room, wall, y0, from, to) {
   return out;
 }
 
-/** Umlaufendes Band (Sockel, Gesims, Leiste) an allen Wänden; Türen werden ausgespart, wenn das Band sie schneidet. */
+/** Zwilling eines Band-Batches für die Fläche einer Geheimtür: sein Mesh hängt am Band-Mesh und verschwindet mit dem Paneel. */
+function secretTwin(batch) {
+  if (batch.secretTwin) return batch.secretTwin;
+  const twin = new Batch();
+  twin.uvFn = batch.uvFn;
+  batch.secretTwin = twin;
+  const mesh = batch.mesh.bind(batch);
+  batch.mesh = (material) => {
+    const band = mesh(material);
+    if (!twin.empty) {
+      const filler = twin.mesh(material);
+      filler.userData.secretFiller = true;
+      band.add(filler);
+    }
+    return band;
+  };
+  return twin;
+}
+
+/** Teilt [a, b] an den Intervallen cuts: { keep: außerhalb, cut: innerhalb }. */
+function splitSpan(a, b, cuts) {
+  const out = { keep: [[a, b]], cut: [] };
+  for (const [s, e] of cuts) {
+    out.keep = out.keep.flatMap(([p, q]) => {
+      const lo = Math.max(p, s), hi = Math.min(q, e);
+      if (hi <= lo) return [[p, q]];
+      out.cut.push([lo, hi]);
+      return [[p, lo], [hi, q]].filter(([u, v]) => v - u > 0.01);
+    });
+  }
+  return out;
+}
+
+/**
+ * Umlaufendes Band (Sockel, Gesims, Leiste) an allen Wänden; Türen werden ausgespart, wenn das Band sie schneidet.
+ * An Geheimtüren liegt das Band im Zwilling-Batch: es schließt die Wand, solange das Paneel steht, und verschwindet mit ihm.
+ */
 export function bandAround(batch, room, y0, y1, d0, d1, color) {
   for (const wall of WALLS) {
     const info = wallInfo(room, wall);
-    for (const [a, b] of spans(room, wall, y0)) wallBox(batch, info, a, b, y0, y1, d0, d1, color);
+    const secret = (room.secretDoors || []).filter((d) => d.wall === wall && y0 < d.height - 1e-6)
+      .map((d) => [d.center - d.width / 2, d.center + d.width / 2]);
+    for (const [a, b] of spans(room, wall, y0)) {
+      const { keep, cut } = splitSpan(a, b, secret);
+      for (const [s, e] of keep) wallBox(batch, info, s, e, y0, y1, d0, d1, color);
+      for (const [s, e] of cut) wallBox(secretTwin(batch), info, s, e, y0, y1, d0, d1, color);
+    }
   }
 }
 
 /** Bildflächen (Wandkoordinaten) aller Slots einer Wand, mit Rand für Rahmen und Schild. */
-export function slotRects(room, wall, pad = 0.3) {
-  return room.slots.filter((s) => s.wall === wall).map((s) => {
+function slotRects(room, wall, pad = 0.3) {
+  const pics = room.slots.filter((s) => s.wall === wall).map((s) => {
     const t = wall === 'n' || wall === 's' ? s.x : s.z;
     return { t0: t - s.w / 2 - pad, t1: t + s.w / 2 + pad, y0: s.y - s.h / 2 - pad - 0.35, y1: s.y + s.h / 2 + pad };
   });
+  // Die Fläche einer Geheimtür bleibt ohne Wandschmuck: er würde nach dem Auflösen des Paneels im Durchgang schweben.
+  const secret = (room.secretDoors || []).filter((d) => d.wall === wall)
+    .map((d) => ({ t0: d.center - d.width / 2 - 0.1, t1: d.center + d.width / 2 + 0.1, y0: 0, y1: d.height + 0.1 }));
+  return [...pics, ...secret];
 }
 
 /** true, wenn ein Wandstück (t0..t1, y0..y1) ein Bild überdecken würde. */
@@ -87,12 +137,25 @@ export function doorLining(batch, room, thick, color) {
   }
 }
 
-/** Boden + Türschwellen, Wände (mit Öffnungen), Decke. Gibt drei Meshes zurück. */
+/** Wandpaneel in einer Geheimtür: sieht aus wie Wand, blendet aus (userData.secretPanel), wenn man hindurchgeht. */
+function secretPanels(room, mat) {
+  return (room.secretDoors || []).map((door) => {
+    const info = wallInfo(room, door.wall);
+    const b = new Batch();
+    wallBox(b, info, door.center - door.width / 2, door.center + door.width / 2, 0, door.height, -WALL_T, 0);
+    const mesh = b.mesh(mat.clone());
+    mesh.material.transparent = true;
+    mesh.userData.secretPanel = { wall: door.wall, center: door.center, width: door.width, height: door.height };
+    return mesh;
+  });
+}
+
+/** Boden + Türschwellen, Wände (mit Öffnungen), Decke; dazu je Geheimtür ein Wandpaneel. */
 export function shell(room, mats, ceilUV) {
   const { x0, z0, x1, z1, height: h } = room;
   const floor = new Batch();
   floor.quad([x0, 0, z1], [x1, 0, z1], [x1, 0, z0], [x0, 0, z0], undefined, { n: [0, 1, 0] });
-  for (const door of room.doors) {
+  for (const door of [...room.doors, ...(room.secretDoors || [])]) {
     const info = wallInfo(room, door.wall);
     const a = door.center - door.width / 2, b = door.center + door.width / 2;
     const [xa, za] = info.to(a, -WALL_T), [xb, zb] = info.to(b, 0);
@@ -104,7 +167,8 @@ export function shell(room, mats, ceilUV) {
     const info = wallInfo(room, wall);
     const ext = wall === 'n' || wall === 's' ? WALL_T : 0;
     let cursor = info.t0 - ext;
-    for (const door of doorsOn(room, wall)) {
+    const openings = [...doorsOn(room, wall), ...(room.secretDoors || []).filter((d) => d.wall === wall)].sort((p, q) => p.center - q.center);
+    for (const door of openings) {
       const a = door.center - door.width / 2, b = door.center + door.width / 2;
       if (a > cursor) wallBox(walls, info, cursor, a, 0, h, -WALL_T, 0);
       wallBox(walls, info, a, b, door.height, h, -WALL_T, 0);
@@ -116,7 +180,7 @@ export function shell(room, mats, ceilUV) {
   ceil.uvFn = ceilUV || null;
   const [cx0, cx1, cz0, cz1] = [x0 - WALL_T, x1 + WALL_T, z0 - WALL_T, z1 + WALL_T];
   ceil.quad([cx0, h, cz0], [cx1, h, cz0], [cx1, h, cz1], [cx0, h, cz1], undefined, { n: [0, -1, 0] });
-  return [floor.mesh(mats.floor), walls.mesh(mats.wall), ceil.mesh(mats.ceil)];
+  return [floor.mesh(mats.floor), walls.mesh(mats.wall), ceil.mesh(mats.ceil), ...secretPanels(room, mats.wall)];
 }
 
 function rectsHit(a, b, pad = 0) {
@@ -139,14 +203,15 @@ function segHitsRect(p, q, rect, r) {
 }
 
 /** Freiflächen: Zone vor jeder Tür und Achsen zwischen den Türen. */
-export function reservedZones(room) {
-  const rects = room.doors.map((door) => {
+function reservedZones(room) {
+  const doors = [...room.doors, ...(room.secretDoors || [])];
+  const rects = doors.map((door) => {
     const info = wallInfo(room, door.wall);
     const [xa, za] = info.to(door.center - door.width / 2 - 0.6, -0.1);
     const [xb, zb] = info.to(door.center + door.width / 2 + 0.6, FRONT_DEPTH);
     return { x0: Math.min(xa, xb), z0: Math.min(za, zb), x1: Math.max(xa, xb), z1: Math.max(za, zb) };
   });
-  const pts = room.doors.map((door) => wallInfo(room, door.wall).to(door.center, 1.0));
+  const pts = doors.map((door) => wallInfo(room, door.wall).to(door.center, 1.0));
   const paths = [];
   for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) paths.push([pts[i], pts[j]]);
   return { rects, paths };

@@ -6,7 +6,7 @@ const { planRoute } = require('./walk-checks');
 const OUT = path.join(__dirname, 'screenshots');
 const GAP = 0.3;
 const ENTER = { e: [1, 0], w: [-1, 0], s: [0, 1], n: [0, -1] };
-const HUD = ['#entdeckt', '#hinweis', '#raumtitel', '#beschriftung', '#joystick.aktiv', '#leer-hinweis'];
+const HUD = ['#entdeckt', '#hinweis', '#raumtitel', '#beschriftung', '#joystick.aktiv', '#leer-hinweis', '.tp-knopf', '.adm-hud'];
 const LIGHTBOX = ['.lb-karte', '#lb-close'];
 const FINALE = ['.fin-karte'];
 

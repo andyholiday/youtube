@@ -57,9 +57,12 @@ function reachable(rooms) {
   return rooms.filter((r) => !seen.has(r.id)).map((r) => `Raum ${r.id} vom Start aus nicht erreichbar`);
 }
 
+const normal = (rooms) => rooms.filter((r) => !r.secret); // der geheime Raum (Easter Egg) gehört nicht zum Rundgang
+
 /** Wände, durch die der Rundgang Raum i -> i+1 führt; mindestens ein Richtungswechsel nötig (ab 3 Räumen). */
 function exitWalls(rooms) {
-  return rooms.slice(0, -1).map((r, i) => (r.doors.find((d) => d.to === i + 1) || {}).wall);
+  const walk = normal(rooms);
+  return walk.slice(0, -1).map((r, i) => (r.doors.find((d) => d.to === i + 1 && !d.secret) || {}).wall);
 }
 
 function hasCorner(rooms) {
@@ -101,12 +104,29 @@ function slotsOk(rooms) {
 }
 
 function perRoom(rooms) {
-  return rooms.flatMap((r) => {
+  return normal(rooms).flatMap((r) => {
     const out = [];
     if (r.height < 7 || r.height > 10) out.push(`Raum ${r.id}: Decke ${r.height} m`);
     if (r.x1 - r.x0 < 10 || r.x1 - r.x0 > 18 || r.z1 - r.z0 < 10 || r.z1 - r.z0 > 18) out.push(`Raum ${r.id}: Maße ${r.x1 - r.x0}x${r.z1 - r.z0}`);
     return out;
   });
+}
+
+/** Geheimer Raum: genau einer, zuletzt, 6 × 6 m, Thema geheim, ohne Bilder-Slots, nur über eine Geheimtür am letzten Rundgangraum. */
+function secretRoom(rooms) {
+  const secret = rooms.filter((r) => r.secret);
+  if (secret.length !== 1) return [`${secret.length} geheime Räume statt 1`];
+  const s = secret[0];
+  const out = [];
+  if (s !== rooms[rooms.length - 1]) out.push('geheimer Raum ist nicht der letzte');
+  if (s.theme !== 'geheim') out.push(`Thema ${s.theme}`);
+  if (Math.abs(s.x1 - s.x0 - 6) > 1e-6 || Math.abs(s.z1 - s.z0 - 6) > 1e-6) out.push(`Maße ${s.x1 - s.x0}x${s.z1 - s.z0}`);
+  if (s.slots.length) out.push('geheimer Raum hat Bilder-Slots');
+  const host = rooms[s.doors[0].to];
+  if (host !== normal(rooms).pop()) out.push('Gastgeber ist nicht der letzte Rundgangraum');
+  if (s.doors.length !== 1 || s.doors[0].secret) out.push('Tür im geheimen Raum muss genau eine offene Tür sein');
+  if (host.doors.filter((d) => d.secret).length !== 1) out.push('Gastgeber braucht genau eine Geheimtür');
+  return out;
 }
 
 function indices(rooms, n) {
@@ -121,7 +141,7 @@ function distinctSizes(rooms) {
 
 /** Alle Struktur-Prüfungen für ein Layout mit n Bildern. */
 function checkAll(rooms, n) {
-  return [...noOverlap(rooms), ...doorsMatch(rooms), ...reachable(rooms), ...slotsOk(rooms), ...perRoom(rooms), ...indices(rooms, n)];
+  return [...noOverlap(rooms), ...doorsMatch(rooms), ...reachable(rooms), ...slotsOk(rooms), ...perRoom(rooms), ...secretRoom(rooms), ...indices(rooms, n)];
 }
 
-module.exports = { noOverlap, doorsMatch, reachable, hasCorner, slotsOk, perRoom, indices, distinctSizes, checkAll, longEdge };
+module.exports = { noOverlap, doorsMatch, reachable, hasCorner, slotsOk, perRoom, secretRoom, normal, indices, distinctSizes, checkAll, longEdge };
